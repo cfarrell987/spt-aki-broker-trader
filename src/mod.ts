@@ -1,4 +1,4 @@
-import { DependencyContainer } from "tsyringe";
+import { DependencyContainer, InjectionToken } from "tsyringe";
 
 // SPT types
 import { IPreAkiLoadMod } from "@spt-aki/models/external/IPreAkiLoadMod";
@@ -12,17 +12,27 @@ import { ConfigTypes } from "@spt-aki/models/enums/ConfigTypes";
 import { ITraderAssort, ITraderBase } from "@spt-aki/models/eft/common/tables/ITrader";
 import { ITraderConfig, UpdateTime } from "@spt-aki/models/spt/config/ITraderConfig";
 import { JsonUtil } from "@spt-aki/utils/JsonUtil";
-import { Item } from "@spt-aki/models/eft/common/tables/IItem";
+import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
 import { IDatabaseTables } from "@spt-aki/models/spt/server/IDatabaseTables";
 import { Money } from "@spt-aki/models/enums/Money";
+import { TradeController } from "@spt-aki/controllers/TradeController";
 
 // New trader settings
 import * as baseJson from "../db/base.json";
+import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
+import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
+import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
+import { BrokerTradeController } from "./broker_trade_controller";
+import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
+import { MyCustomLauncherCallbacks } from "./testoverride";
+import {RagfairOfferHelper} from "@spt-aki/helpers/RagfairOfferHelper";
 
-class SampleTrader implements IPreAkiLoadMod, IPostDBLoadMod 
+class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
 {
     mod: string
     logger: ILogger
+
+    private static container: DependencyContainer;
 
     constructor() 
     {
@@ -35,6 +45,8 @@ class SampleTrader implements IPreAkiLoadMod, IPostDBLoadMod
      */
     public preAkiLoad(container: DependencyContainer): void 
     {
+        BrokerTrader.container = container;
+
         this.logger = container.resolve<ILogger>("WinstonLogger");
         this.logger.debug(`[${this.mod}] preAki Loading... `);
 
@@ -43,6 +55,18 @@ class SampleTrader implements IPreAkiLoadMod, IPostDBLoadMod
         const configServer = container.resolve<ConfigServer>("ConfigServer");
         const traderConfig: ITraderConfig = configServer.getConfig<ITraderConfig>(ConfigTypes.TRADER);
         
+        this.logger.log(TradeController.name, LogTextColor.RED);
+        container.register<BrokerTradeController>(BrokerTradeController.name, BrokerTradeController);
+        container.register(TradeController.name, {useToken: BrokerTradeController.name});
+
+        // container.afterResolution(RagfairOfferHelper.name, (_t, result: RagfairOfferHelper) => 
+        // {
+        //     result.co
+        //     // The modifier Always makes sure this replacement method is ALWAYS replaced
+        // }, {frequency: "Always"});
+        // container.register<MyCustomLauncherCallbacks>("MyCustomLauncherCallbacks", MyCustomLauncherCallbacks);
+        // container.register("LauncherCallbacks", {useToken: "MyCustomLauncherCallbacks"});
+
         this.registerProfileImage(preAkiModLoader, imageRouter);
         
         this.setupTraderUpdateTime(traderConfig);
@@ -70,7 +94,7 @@ class SampleTrader implements IPreAkiLoadMod, IPostDBLoadMod
         // Add new trader to the trader dictionary in DatabaseServer
         this.addTraderToDb(baseJson, tables, jsonUtil);
 
-        this.addTraderToLocales(tables, baseJson.name, "Cat", baseJson.nickname, baseJson.location, "This is the cat shop");
+        this.addTraderToLocales(tables, baseJson.name, baseJson.name, baseJson.nickname, baseJson.location, "This is the cat shop");
 
         this.logger.debug(`[${this.mod}] postDb Loaded`);
     }
@@ -263,4 +287,4 @@ class SampleTrader implements IPreAkiLoadMod, IPostDBLoadMod
     }
 }
 
-module.exports = { mod: new SampleTrader() }
+module.exports = { mod: new BrokerTrader() }
