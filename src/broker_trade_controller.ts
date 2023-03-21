@@ -29,6 +29,7 @@ import { BrokerPriceManager } from "./broker_price_manager";
 import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 import { RagfairServerHelper } from "@spt-aki/helpers/RagfairServerHelper";
 import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
+import { RagfairTaxHelper } from "@spt-aki/helpers/RagfairTaxHelper";
 
 @injectable()
 export class BrokerTradeController extends TradeController
@@ -67,23 +68,45 @@ export class BrokerTradeController extends TradeController
                 const itemsToSell = Object.values(sellData.items).map(sdItem => this.getItemFromInventoryById(sdItem.id, pmcData));
 
                 const ragfairServerHelper = container.resolve<RagfairServerHelper>(RagfairServerHelper.name);
+                const ragfairTaxHelper = container.resolve<RagfairTaxHelper>(RagfairTaxHelper.name);
                 const itemHelper = container.resolve<ItemHelper>(ItemHelper.name);
                 const testItem = this.getItemFromInventoryById(sellData.items[0].id, pmcData);
+
+
+                // const fleaTax = ragfairTaxHelper.calculateTax(testItem, pmcData, 50000, priceManager.getItemStackObjectsCount(testItem), true);
+                // this.logger.log(`ITEM TAX DUMP => ${JSON.stringify(fleaTax)}`, LogTextColor.RED);
+
+                // const itemChildrenIds = itemHelper.findAndReturnChildrenByItems(pmcData.Inventory.items, testItem._id);
+                // const itemChildren = itemChildrenIds.map(id => this.getItemFromInventoryById(id, pmcData));
+                // this.logger.log(`ITEMHELPER children IDS => ${JSON.stringify(itemChildrenIds)}`, LogTextColor.RED);
+                // this.logger.log(`ITEMHELPER children ITEMS => ${JSON.stringify(itemChildren)}`, LogTextColor.RED);
+                // this.logger.log(`ITEMHELPER by assort => ${JSON.stringify(itemHelper.findAndReturnChildrenAsItems([testItem], testItem.parentId))}`, LogTextColor.RED);
+                // this.logger.log(`ITEMHELPER manager recursive  => ${JSON.stringify(priceManager.getAllChildren(testItem))}`, LogTextColor.RED);
+                
+                this.logger.log(`getItemTraderPrice => ${(priceManager.getSingleItemTraderPrice(testItem, priceManager.getBestTraderForItemTpl(testItem._tpl).id))}`, LogTextColor.RED);
+
 
                 const ragfairPriceService = container.resolve<RagfairPriceService>("RagfairPriceService");
                 this.logger.log(`getFleaPriceForItem => ${ragfairPriceService.getFleaPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
                 this.logger.log(`getDynamicPriceForItem => ${ragfairPriceService.getDynamicPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
                 this.logger.log(`getStaticPriceForItem => ${ragfairPriceService.getStaticPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
+                // this.logger.log(`calculateItemWorth IS ROOT - true => ${ragfairTaxHelper.calculateItemWorth(testItem, itemHelper.getItem(testItem._tpl)[1], 1, pmcData, true)}`, LogTextColor.GREEN);
+                // this.logger.log(`calculateItemWorth IS ROOT - false => ${ragfairTaxHelper.calculateItemWorth(testItem, itemHelper.getItem(testItem._tpl)[1], 1, pmcData, false)}`, LogTextColor.GREEN);
+
                 // this.logger.log(`getDynamicOfferPrice => ${ragfairPriceService.getDynamicOfferPrice(testItem._tpl)}`, LogTextColor.GREEN);
 
                 
 
                 this.logger.log(`TESTING isValidRagfairItem SpawnedInSession() TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([false, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
                 this.logger.log(`TESTING isValidRagfairItem SpawnedInSession() TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([true, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
-                this.logger.log(`TESTING isValidRagfairItem SpawnedInSession(${testItem.upd.SpawnedInSession}) TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([testItem.upd.SpawnedInSession, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
+                // this.logger.log(`TESTING isValidRagfairItem SpawnedInSession(${testItem.upd.SpawnedInSession}) TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([testItem.upd.SpawnedInSession, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
 
 
                 this.logger.log(`ITEMS TO SELL DUMP: ${JSON.stringify(itemsToSell)}`, LogTextColor.CYAN);
+
+                const testData = {...sellData};
+
+                this.logger.log(`TESTING PRICE MANAGER: ${JSON.stringify(priceManager.processSellDataForMostProfit(pmcData, sellData))}`, LogTextColor.CYAN);
 
                 // Distribute items to their according best profit traders.
                 const itemsToSellPerTrader = Object.keys(priceManager.supportedTraders).reduce((accum, traderName) => 
@@ -102,7 +125,7 @@ export class BrokerTradeController extends TradeController
                             tid: traderId,
                             type: sellData.type,
                             items: sellData.items.filter(sdItem => traderItemsToSell.map(item => item._id).includes(sdItem.id)),
-                            price: 1000000 // Calculate price per trader
+                            price: 1 // Calculate price per trader
                         } as IProcessSellTradeRequestData,
                         sellItems: traderItemsToSell
                     }
