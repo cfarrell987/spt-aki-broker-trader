@@ -25,8 +25,10 @@ import { RagfairSellHelper } from "@spt-aki/helpers/RagfairSellHelper";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { TProfileChanges, Warning } from "@spt-aki/models/eft/itemEvent/IItemEventRouterBase";
 import { RagfairOfferHolder } from "@spt-aki/utils/RagfairOfferHolder";
-import { BrokerPriceManager } from "./trader_best_price_table";
+import { BrokerPriceManager } from "./broker_price_manager";
 import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
+import { RagfairServerHelper } from "@spt-aki/helpers/RagfairServerHelper";
+import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
 
 @injectable()
 export class BrokerTradeController extends TradeController
@@ -59,9 +61,28 @@ export class BrokerTradeController extends TradeController
     
             if (body.type === "sell_to_trader") 
             {
+                
                 const priceManager = BrokerPriceManager.getInstance(container);
                 const sellData = body as IProcessSellTradeRequestData;
                 const itemsToSell = Object.values(sellData.items).map(sdItem => this.getItemFromInventoryById(sdItem.id, pmcData));
+
+                const ragfairServerHelper = container.resolve<RagfairServerHelper>(RagfairServerHelper.name);
+                const itemHelper = container.resolve<ItemHelper>(ItemHelper.name);
+                const testItem = this.getItemFromInventoryById(sellData.items[0].id, pmcData);
+
+                const ragfairPriceService = container.resolve<RagfairPriceService>("RagfairPriceService");
+                this.logger.log(`getFleaPriceForItem => ${ragfairPriceService.getFleaPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
+                this.logger.log(`getDynamicPriceForItem => ${ragfairPriceService.getDynamicPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
+                this.logger.log(`getStaticPriceForItem => ${ragfairPriceService.getStaticPriceForItem(testItem._tpl)}`, LogTextColor.GREEN);
+                // this.logger.log(`getDynamicOfferPrice => ${ragfairPriceService.getDynamicOfferPrice(testItem._tpl)}`, LogTextColor.GREEN);
+
+                
+
+                this.logger.log(`TESTING isValidRagfairItem SpawnedInSession() TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([false, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
+                this.logger.log(`TESTING isValidRagfairItem SpawnedInSession() TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([true, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
+                this.logger.log(`TESTING isValidRagfairItem SpawnedInSession(${testItem.upd.SpawnedInSession}) TPL_ID (${testItem._tpl}) -> ${ragfairServerHelper.isItemValidRagfairItem([testItem.upd.SpawnedInSession, itemHelper.getItem(testItem._tpl)[1]])}`, LogTextColor.YELLOW);
+
+
                 this.logger.log(`ITEMS TO SELL DUMP: ${JSON.stringify(itemsToSell)}`, LogTextColor.CYAN);
 
                 // Distribute items to their according best profit traders.
@@ -100,6 +121,8 @@ export class BrokerTradeController extends TradeController
 
                 this.logger.log(`RESPONSES ARRAY DUMP: ${JSON.stringify(responses)}`, LogTextColor.CYAN);
 
+
+
                 return super.confirmTrading(pmcData, body, sessionID, foundInRaid, upd);
             }
         }
@@ -108,12 +131,24 @@ export class BrokerTradeController extends TradeController
 
     public override confirmRagfairTrading(pmcData: IPmcData, body: IProcessRagfairTradeRequestData, sessionID: string): IItemEventRouterResponse 
     {
+        const ragfairOfferService = container.resolve<RagfairOfferService>(RagfairOfferService.name);
+        for (const offer of body.offers)
+        {
+            const ragfairOffer = ragfairOfferService.getOfferByOfferId(offer.id);
+            this.logger.warning(`OFFER DUMP: ${JSON.stringify(ragfairOffer)}`);
+        }
         const result = super.confirmRagfairTrading(pmcData, body, sessionID);
         this.logger.log(JSON.stringify(body), LogTextColor.CYAN);
         this.logger.log(JSON.stringify(result), LogTextColor.CYAN);
         return result;
     }
 
+    /**
+     * @deprecated Contains a testing impelmentation of generating Flea Offers
+     * @param body 
+     * @param pmcData 
+     * @param sessionID 
+     */
     private fleaSell(body, pmcData, sessionID): void
     {
         const sellData = body as IProcessSellTradeRequestData;
@@ -191,7 +226,7 @@ export class BrokerTradeController extends TradeController
 
     // Find item by it's id in inventory. If not found return undefined.
     private getItemFromInventoryById(itemId: string, pmcData: IPmcData): Item
-    {
+    {        
         return pmcData.Inventory.items.find(item => item._id === itemId);
     }
 
