@@ -184,7 +184,7 @@ class BrokerPriceManager
             return {
                 traderId: this.brokerTraderId,
                 price: ragfairPrice,
-                tax: this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)
+                tax: this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) // not exactly precise, but no other choice
             };
         }
         return {
@@ -414,13 +414,14 @@ class BrokerPriceManager
         const avgPrice = validOffersForItemTpl != undefined 
             ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
             //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.
-            : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId), this.ragfairPriceService.getDynamicPriceForItem(itemTplId));
-        if (itemTplId === "5e8488fa988a8701445df1e4")
-        {
-            console.log(`[getItemPointsData] ${JSON.stringify(this.getItemPointsData(validOffersForItemTpl[0].items[0]))}`)
-            console.log(`[itemOrigMaxPts] ${JSON.stringify(itemOrigMaxPts)}`)
-            console.log(`[validOffersForItemTpl] ${JSON.stringify(avgPrice)}`)
-        }
+            // getDynamicPriceForItem might return "undefined" for some reason, so check for it (getStaticPriceForItem too just in case)
+            : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
+        // if (itemTplId === "5e8488fa988a8701445df1e4")
+        // {
+        //     console.log(`[getItemPointsData] ${JSON.stringify(this.getItemPointsData(validOffersForItemTpl[0].items[0]))}`)
+        //     console.log(`[itemOrigMaxPts] ${JSON.stringify(itemOrigMaxPts)}`)
+        //     console.log(`[validOffersForItemTpl] ${JSON.stringify(avgPrice)}`)
+        // }
         return {
             avgPrice: Math.round(avgPrice),
             pricePerPoint: Math.round(avgPrice / itemOrigMaxPts)
@@ -431,9 +432,9 @@ class BrokerPriceManager
     {
         const pointsData = this.getItemPointsData(item);
         // Round, since weapon or armor durability can be float, etc.
-        console.log(`[POINTS DATA] ${JSON.stringify(pointsData)}`);
-        console.log(`[RAGFAIR PRICE DATA] ${JSON.stringify(this.getItemTplRagfairPrice(item._tpl))}`);
-        console.log(`[GET STACK OBJECT COUNT DATA] ${JSON.stringify(this.getItemStackObjectsCount(item))}`);
+        // console.log(`[POINTS DATA] ${JSON.stringify(pointsData)}`);
+        // console.log(`[RAGFAIR PRICE DATA] ${JSON.stringify(this.getItemTplRagfairPrice(item._tpl))}`);
+        // console.log(`[GET STACK OBJECT COUNT DATA] ${JSON.stringify(this.getItemStackObjectsCount(item))}`);
         return Math.round(pointsData.currentPoints * this.getItemTplRagfairPrice(item._tpl).pricePerPoint) * this.getItemStackObjectsCount(item);
     }
 
