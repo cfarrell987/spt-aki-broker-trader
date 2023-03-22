@@ -9,20 +9,22 @@ import { IProcessSellTradeRequestData, Item as SellDataItem } from "@spt-aki/mod
 import { Traders } from "@spt-aki/models/enums/Traders"
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
-import { DependencyContainer } from "tsyringe";
+import { DependencyContainer, container as tsyringeContainer } from "tsyringe";
 import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
 import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
 import { RagfairTaxHelper } from "@spt-aki/helpers/RagfairTaxHelper";
 import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 
 import baseJson from "../db/base.json";
+import modInfo from "../package.json";
+import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
 
 
 class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
 
-    private container: DependencyContainer;
+    private _container: DependencyContainer;
 
     private handbook: IHandbookBase;
     private handbookHelper: HandbookHelper; // Using with hydrateLookup() might be good to check if items exist in handbook and find their ragfair avg price
@@ -33,20 +35,21 @@ class BrokerPriceManager
     private ragfairTaxHelper: RagfairTaxHelper;
     private ragfairOfferService: RagfairOfferService;
 
-    private brokerTraderId = baseJson._id;
+    public brokerTraderId = baseJson._id;
     
     private dbServer: DatabaseServer;
+    private dbGlobals: IGlobals;
     private dbItems: Record<string, ITemplateItem>; // Might replace with ItemHelper.getItems() since I don't write anything into the database
     private dbTraders: Record<string, ITrader>;
     public supportedTraders: Record<string, string>;
 
-    private tradersMetaData: TradersMetaData;
+    private _tradersMetaData: TradersMetaData;
     private _itemTraderTable: Record<string, TraderBaseData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
     private _itemRagfairPriceTable: Record<string, ItemRagfairPrice>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
-    private constructor(container: DependencyContainer)
+    private constructor(container?: DependencyContainer)
     {
-        this.container = container;
+        this._container = container ?? tsyringeContainer;
 
         this.itemHelper = container.resolve<ItemHelper>("ItemHelper");
         this.handbookHelper = container.resolve<HandbookHelper>("HandbookHelper");
@@ -57,6 +60,7 @@ class BrokerPriceManager
         this.ragfairOfferService = container.resolve<RagfairOfferService>("RagfairOfferService");
 
         this.dbServer = container.resolve<DatabaseServer>("DatabaseServer");
+        this.dbGlobals = this.dbServer.getTables().globals;
         this.handbook = this.dbServer.getTables().templates.handbook;
         this.dbItems = this.dbServer.getTables().templates.items;
         this.dbTraders = this.dbServer.getTables().traders;
@@ -65,21 +69,46 @@ class BrokerPriceManager
             accum[key] = Traders[key];
             return accum;
         }, {});
-        console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
+        // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
 
         // Generate tables after all dependencies are resolved.
-        this.tradersMetaData = this.getTradersMetaData();
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating caches...`);
+        this._tradersMetaData = this.getTradersMetaData();
+        console.log(`[${modInfo.name} ${modInfo.version}] Generated Traders Meta Data.`);
         this._itemTraderTable = this.getItemTraderTable();
+        console.log(`[${modInfo.name} ${modInfo.version}] Generated Item Trader Table.`);
         this._itemRagfairPriceTable = this.getFreshItemRagfairPriceTable();
+        console.log(`[${modInfo.name} ${modInfo.version}] Generated Item Ragfair Price Table.`);
+
     }
 
-    public static getInstance(container: DependencyContainer): BrokerPriceManager
+    public static getInstance(container?: DependencyContainer): BrokerPriceManager
     {
         if (!this._instance)
         {
             BrokerPriceManager._instance = new BrokerPriceManager(container);
         }
         return this._instance;
+    }
+
+    public isBrokerTraderId(traderId: string): boolean
+    {
+        return this.brokerTraderId === traderId;
+    }
+
+    public get container(): DependencyContainer
+    {
+        return this._container;
+    }
+
+    public static get instance(): BrokerPriceManager
+    {
+        return this.getInstance();
+    }
+
+    public get tradersMetaData(): TradersMetaData
+    {
+        return this._tradersMetaData;
     }
 
     public get itemTraderTable(): Record<string, TraderBaseData>
@@ -133,7 +162,7 @@ class BrokerPriceManager
         // Only used as a sort of "sell to flea" flag
         data[baseJson._id] = {
             id: baseJson._id,
-            name: baseJson.name,
+            name: baseJson.nickname.toUpperCase(),
             itemsBuy: {category: [], id_list: []},
             itemsBuyProhibited: {category: [], id_list: []},
             buyPriceCoef: Infinity // to make sure it's never selected as the most profitable trader
@@ -143,7 +172,7 @@ class BrokerPriceManager
 
     public canBeBoughtByTrader(itemTplId: string, traderId: string ): boolean
     {
-        const traderMetaData = this.tradersMetaData[traderId];
+        const traderMetaData = this._tradersMetaData[traderId];
         const item = this.dbItems[itemTplId];
         // Might use itemBaseClassService but right now seems unnecessary
         // Also a very good option is itemHelpes.isOfBaseClass, check for every category (category.some()).
@@ -154,7 +183,7 @@ class BrokerPriceManager
 
     public getBestTraderForItemTpl(itemTplId: string): TraderBaseData
     {
-        const sellableTraders = Object.values(this.tradersMetaData).filter(traderMeta => this.canBeBoughtByTrader(itemTplId, traderMeta.id));
+        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canBeBoughtByTrader(itemTplId, traderMeta.id));
         if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
         // the lower the coef the more money you'll get
         const lowestCoef = Math.min(...sellableTraders.map(trader => trader.buyPriceCoef));
@@ -168,7 +197,7 @@ class BrokerPriceManager
         // Even if for some reason Fence doesn't buy this item category(probably shouldn't even be possible)
         // it will be force sold to him anyway
         return pointsData.currentMaxPoints < pointsData.OriginalMaxPoints * 0.6 && this.isOfRepairableBaseClass(item._tpl)
-            ? this.tradersMetaData[Traders.FENCE]
+            ? this._tradersMetaData[Traders.FENCE]
             : this.getBestTraderForItemTpl(item._tpl);
     }
 
@@ -177,20 +206,91 @@ class BrokerPriceManager
         const bestTrader = this.getBestTraderForItem(item);
         const traderPrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
         const ragfairPrice = this.getItemRagfairPrice(item, pmcData);  
-        console.log(`[traderPrice] ${traderPrice}`);      
-        console.log(`[ragfairPrice] ${ragfairPrice}`);      
+        // console.log(`[traderPrice] ${traderPrice}`);      
+        // console.log(`[ragfairPrice] ${ragfairPrice}`);      
+        // console.log(`[TAX] ${this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)}`);
+        // console.log("PARAMS:",item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true);
         if (ragfairPrice > traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
         {
             return {
                 traderId: this.brokerTraderId,
                 price: ragfairPrice,
-                tax: this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) // not exactly precise, but no other choice
+                tax: this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0
             };
         }
         return {
             traderId: bestTrader.id,
             price: traderPrice
         };
+    }
+
+    /**
+     * Calculates the flea tax while taking in account user's Intelligence Center bonus and Hideout Management skill.
+     * 
+     * Had to make it myself since the provided RagfairTaxHelper.calculateTax is unreliable and sometimes returned NULL.
+     * @param item Item to evaluate the tax.
+     * @param pmcData PMC profile to whom the item belongs.
+     * @param requirementsValue The price you want to sell the item for.
+     * @param offerItemCount How many items in the flea offer.
+     * @param sellInOnePiece Sell in batch or not.
+     * @returns Flea tax value.
+     */
+    public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number
+    {
+        //         Tax
+        // The fee you'll have to pay to post an offer on Flea Market is calculated using the following formula:
+        // VO × Ti × 4^PO × Q + VR × Tr × 4^PR × Q
+        // Where:
+        // VO is the total value of the offer, calculated by multiplying the base price of the item times the amount (base price × total item count / Q). The Base Price is a predetermined value for each item.
+        // VR is the total value of the requirements, calculated by adding the product of each requirement base price by their amount.
+        // PO is a modifier calculated as log10(VO / VR).
+        // If VR is less than VO then PO is also raised to the power of 1.08.
+        // PR is a modifier calculated as log10(VR / VO).
+        // If VR is greater or equal to VO then PR is also raised to the power of 1.08.
+        // Q is the "quantity" factor which is either 1 when "Require for all items in offer" is checked or the amount of items being offered otherwise.
+        // Ti and Tr are tax constants; currently set to Ti = 0.03 and Tr = 0.03
+
+        //The base price of any item can be calculated by dividing the trader buyback price with the multiplier of that trader. 
+        //Traders have a different multiplier,
+        //Therapist=0.63, Ragman=0.62, Jaeger=0.6, Mechanic=0.56, Prapor=0.5, Skier=0.49, Peacekeeper=0.45, Fence=0.4.
+        //Durability of items or number of uses affects the base price, so in order to get the base price of full items, don't compare with damaged/used ones.
+        // const basePrice = this.handbookHelper.getTemplatePrice(item._tpl);
+        const bestTrader = this.getBestTraderForItem(item);
+        const basePrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
+
+        const Q = sellInOnePiece ? offerItemCount : 1;
+        const VO = basePrice * offerItemCount / Q;
+        const VR = requirementsValue;
+        let PO = Math.log10(VO/VR);
+        if (VR < VO) PO = Math.pow(PO, 1.08);
+        let PR = Math.log10(VR/VO);
+        if (VR >= VO) PR = Math.pow(PR, 1.08);
+        const Ti = 0.03;
+        const Tr = 0.03;
+
+        const pureTax = VO * Ti * Math.pow(4, PO) * Q + VR * Tr * Math.pow(4, PR) * Q;
+
+        // Accounts for only one flea tax reduction bonus, since no other hideout are provides such bonuses.
+        const intelBonus = pmcData.Bonuses.find(bonus => bonus.type === "RagfairCommission");
+        // It might be undefined when you have no intel center built at all.
+        // if (hideoutManagement == undefined) console.log("[Broker Trader] COULDN'T FIND INTELLIGENCE CENTER , DEFAULTING TO NO TAX REDUCTION");
+        const intelBonusVal = intelBonus?.value ?? 0; // expect that bonus.value will be NEGATIVE
+        const hideoutManagement = pmcData.Skills.Common.find(skill => skill.Id === "HideoutManagement");
+        if (hideoutManagement == undefined) console.log("[Broker Trader] COULDN'T FIND HIDEOUT MANAGEMENT SKILL, DEFAULTING TO SKILL LEVEL 1");
+        const hmProgress = hideoutManagement?.Progress ?? 1; // total skill xp
+        // Wiki states that hideout management hives 0.3% per level. But config says 1%. Ingame says 1%. Select config value.
+        const hmSkillBoostPercent = this.dbGlobals.config.SkillsSettings.HideoutManagement.SkillBoostPercent; // precent per 1 level
+        // When calculating hideout management level (hmprogress/100) might wanna drop floating digits, but for now this works.
+        const hmAreaMultiplier = 1 + hmProgress / 100 * hmSkillBoostPercent / 100; // how much the intel tax reduction should be buffed
+        const intelTaxReduction = 1 - Math.abs(intelBonusVal) * hmAreaMultiplier / 100; // total intel center reduction with hideout management accounted for
+        
+        // console.log(`[PURE TAX] ${pureTax}`);
+        // console.log(`[HM AREA MULT] ${hmAreaMultiplier}`);
+        // console.log(`[intel tax reduction CALC] ${Math.abs(intelBonusVal) * hmAreaMultiplier / 100}`);
+        // console.log(`[intel tax reduction] ${intelTaxReduction}`);
+
+        // Might use trunc later to truncate the floating point.
+        return Math.round(pureTax * intelTaxReduction);
     }
 
     public getItemPointsData(item: Item): ItemPointsData
@@ -259,7 +359,7 @@ class BrokerPriceManager
      * @param itemId 
      * @returns 
      */
-    protected getItemPointsDataById(itemId: string): ItemPointsData
+    private getItemPointsDataById(itemId: string): ItemPointsData
     {
         return undefined;
     }
@@ -269,7 +369,7 @@ class BrokerPriceManager
      * @param itemId 
      * @returns 
      */
-    protected getOriginalMaxPointsByTplId(itemTplId: string): number
+    private getOriginalMaxPointsByTplId(itemTplId: string): number
     {
         return undefined;
     }
@@ -278,6 +378,8 @@ class BrokerPriceManager
     {
         // const itemTpl = this.itemHelper.getItem(item._tpl)[1]; - keep it here if I move to itemHelper later
         const itemTpl = this.dbItems[item._tpl];
+        // const founInRaid = item.upd?.SpawnedInSession ?? false;
+        // console.log(item.upd?.SpawnedInSession ?? false);
         // The first boolean param seems to refer to "spawnedInSession"(found in raid)
         return this.ragfairServerHelper.isItemValidRagfairItem([item.upd?.SpawnedInSession ?? false, itemTpl]);
     }
@@ -301,31 +403,57 @@ class BrokerPriceManager
 
     // inventory items are required to check for "item.upd.spawnedInSession"
     // so you'd have to pass either pmcData and look for items there or inventory items themselves
-    public processSellDataForMostProfit(pmcData: IPmcData, sellData: IProcessSellTradeRequestData): Record<string, IProcessSellTradeRequestData>
+    public processSellRequestDataForMostProfit(pmcData: IPmcData, sellData: IProcessSellTradeRequestData): ProcessedSellData
     {
         const sellDataItems = sellData.items;
-        return sellDataItems.reduce((accum, curr) => 
+        return sellDataItems.reduce((accum, currItem) => 
         {
-            const inventoryItem = this.getItemFromInventoryById(curr.id, pmcData);
+            const inventoryItem = this.getItemFromInventoryById(currItem.id, pmcData);
             const sellDesicion = this.getBestSellDesicionForItem(pmcData, inventoryItem);
-            const groupBy = sellDesicion.traderId;
-            if (accum[groupBy] == undefined)
+            const groupByTraderId = sellDesicion.traderId;
+            const itemTax = (sellDesicion.tax ?? 0);
+            // console.log(`[SELL DECISION] ${JSON.stringify(sellDesicion)}`);
+            // console.log(`[ITEM TAX] ${itemTax}`);
+            const itemPrice = sellDesicion.price; 
+            const sellProfit = itemPrice - itemTax;
+            const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
+            const fullItemCount = this.getFullItemCount(inventoryItem, pmcData); // might be unnessecary and performance intensive
+            if (accum[groupByTraderId] == undefined)
             {
-                accum[groupBy] = {
-                    Action: sellData.Action,
-                    items: [curr],
-                    price: sellDesicion.price - (sellDesicion.tax ?? 0),
-                    tid: groupBy,
-                    type: sellData.type
+                // Creating new group
+                accum[groupByTraderId] = {
+                    isFleaMarket: this.isBrokerTraderId(groupByTraderId),
+                    traderName: this._tradersMetaData[groupByTraderId].name,
+                    totalPrice: itemPrice,
+                    totalTax: itemTax,
+                    totalProfit: sellProfit,
+                    totalItemCount: 1,
+                    totalStackObjectsCount: itemStackObjectsCount,
+                    fullItemCount: fullItemCount,
+                    requestBody: {
+                        Action: sellData.Action,
+                        items: [currItem],
+                        price: sellProfit, // important, subtract the tax to properly calculate profit
+                        tid: groupByTraderId,
+                        type: sellData.type
+                    }
                 };
             }
             else 
             {
-                accum[groupBy].items.push(curr);
-                accum[groupBy].price += sellDesicion.price - (sellDesicion.tax ?? 0);
+                // Updating existing group
+                accum[groupByTraderId].totalPrice += itemPrice;
+                accum[groupByTraderId].totalTax += itemTax;
+                accum[groupByTraderId].totalProfit += sellProfit;
+                accum[groupByTraderId].totalItemCount += 1;
+                accum[groupByTraderId].totalStackObjectsCount += itemStackObjectsCount;
+                accum[groupByTraderId].fullItemCount += fullItemCount;
+
+                accum[groupByTraderId].requestBody.items.push(currItem);
+                accum[groupByTraderId].requestBody.price += sellProfit; // important, subtract the tax to properly calculate profit
             }
             return accum;
-        }, {} as Record<string, IProcessSellTradeRequestData>);
+        }, {} as ProcessedSellData);
     }
 
     /**
@@ -336,7 +464,7 @@ class BrokerPriceManager
      */
     public getItemTplTraderPrice(itemTplId: string, traderId: string): number
     {
-        const traderMeta = this.tradersMetaData[traderId];
+        const traderMeta = this._tradersMetaData[traderId];
         const buyPriceMult = 1 - traderMeta.buyPriceCoef/100;
         const basePrice = this.handbookHelper.getTemplatePrice(itemTplId); // this.ragfairPriceService.getStaticPriceForItem - can be used instead
         return Math.round(basePrice * buyPriceMult);
@@ -353,8 +481,8 @@ class BrokerPriceManager
     {
         const tplPrice = this.getItemTplTraderPrice(item._tpl, traderId);
         const pointsData = this.getItemPointsData(item);
-        console.log(`[tplPrice] ${JSON.stringify(tplPrice)}`);
-        console.log(`[pointsData] ${JSON.stringify(pointsData)}`);
+        // console.log(`[tplPrice] ${JSON.stringify(tplPrice)}`);
+        // console.log(`[pointsData] ${JSON.stringify(pointsData)}`);
         return this.isOfRepairableBaseClass(item._tpl) 
             // for repairable items approximate based on current Max Durability
             // although it won't account for current durability, game balance impact should be negligible.
@@ -367,7 +495,7 @@ class BrokerPriceManager
     public getItemTraderPrice(item: Item, traderId: string, pmcData: IPmcData): number
     {
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
-        console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
+        // console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
         return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemTraderPrice(curr, traderId), 0);
     }
 
@@ -396,7 +524,7 @@ class BrokerPriceManager
      * @param itemTplId Item Template Id.
      * @returns ItemRagfairPrice with avg and perPoint price.
      */
-    protected getFreshItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
+    private getFreshItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
     {
         let itemOrigMaxPts = 1;
         // Collect offers with at least 85% durability/resource (if item has no points properties - its valid) and no sellInOnePiece
@@ -459,6 +587,18 @@ class BrokerPriceManager
         return item.upd?.StackObjectsCount ?? 1;
     }
 
+    /**
+     * Looking for children is pretty intensive, maybe shouldn't be used, since I only intend to use it for logging.
+     * @param item 
+     * @param pmcData 
+     * @returns 
+     */
+    public getFullItemCount(item: Item, pmcData: IPmcData): number
+    {
+        const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+        return itemAndChildren.reduce((accum, curr) => accum + this.getItemStackObjectsCount(curr), 0);
+    }
+
     // public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number{
     //     return this.ragfairTaxHelper.calculateTax(item, pmcData, requirementsValue, offerItemCount, sellInOnePiece);
     // }
@@ -517,24 +657,24 @@ interface ItemPointsData
     OriginalMaxPoints: number;
 }
 
-// Data used to process several sell requests
-interface TradersSellData
+/**
+ * Processed sell data per trader.
+ */
+// Sort of has a little bit of unnecessary data,
+// but that helps calculating the flea rep change
+// inside the controler, and also log some info.
+interface ProcessedSellData
 {
-    [traderId: string]:{
-        traderId: string;
+    [traderId: string]: {
+        isFleaMarket: boolean;
         traderName: string;
-        sellData: IProcessSellTradeRequestData;
-    }
-}
-
-// Data used to process the one big ragfair sell request REMAKE TO FIT TRADER
-interface RagfairSellData
-{
-    [itemId: string]:{
-        itemId: string;
-        itemTplId: string;
-        item: Item;
-        sellDataItem: SellDataItem;
+        totalPrice: number;
+        totalTax: number;
+        totalProfit: number;
+        totalItemCount: number;
+        totalStackObjectsCount: number;
+        fullItemCount: number;
+        requestBody: IProcessSellTradeRequestData;
     }
 }
 

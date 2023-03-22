@@ -18,25 +18,28 @@ import { Money } from "@spt-aki/models/enums/Money";
 import { TradeController } from "@spt-aki/controllers/TradeController";
 
 // New trader settings
-import * as baseJson from "../db/base.json";
+import baseJson from "../db/base.json";
+import modInfo from "../package.json";
 import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
 import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
 import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
 import { BrokerTradeController } from "./broker_trade_controller";
 import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
 import { MyCustomLauncherCallbacks } from "./testoverride";
-import {RagfairOfferHelper} from "@spt-aki/helpers/RagfairOfferHelper";
+import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
+import { VerboseLogger } from "./verbose_logger";
+import { BrokerPriceManager } from "./broker_price_manager";
 
 class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
 {
-    mod: string
-    logger: ILogger
+    mod: string;
+    logger: VerboseLogger;
 
     private static container: DependencyContainer;
 
     constructor() 
     {
-        this.mod = "Nightingale-brokertrader-1.0.0"; // Set name of mod so we can log it to console later
+        this.mod = `${modInfo.name} ${modInfo.version}`; // Set name of mod so we can log it to console later
     }
 
     /**
@@ -46,9 +49,8 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
     public preAkiLoad(container: DependencyContainer): void 
     {
         BrokerTrader.container = container;
-
-        this.logger = container.resolve<ILogger>("WinstonLogger");
-        this.logger.debug(`[${this.mod}] preAki Loading... `);
+        this.logger = new VerboseLogger(container);
+        this.logger.explicitInfo(`[${this.mod}] preAki Loading... `);
 
         const preAkiModLoader: PreAkiModLoader = container.resolve<PreAkiModLoader>("PreAkiModLoader");
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");
@@ -59,19 +61,11 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         container.register<BrokerTradeController>(BrokerTradeController.name, BrokerTradeController);
         container.register(TradeController.name, {useToken: BrokerTradeController.name});
 
-        // container.afterResolution(RagfairOfferHelper.name, (_t, result: RagfairOfferHelper) => 
-        // {
-        //     result.co
-        //     // The modifier Always makes sure this replacement method is ALWAYS replaced
-        // }, {frequency: "Always"});
-        // container.register<MyCustomLauncherCallbacks>("MyCustomLauncherCallbacks", MyCustomLauncherCallbacks);
-        // container.register("LauncherCallbacks", {useToken: "MyCustomLauncherCallbacks"});
-
         this.registerProfileImage(preAkiModLoader, imageRouter);
         
         this.setupTraderUpdateTime(traderConfig);
         
-        this.logger.debug(`[${this.mod}] preAki Loaded`);
+        this.logger.explicitInfo(`[${this.mod}] preAki Loaded`);
     }
     
     /**
@@ -80,7 +74,10 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
      */
     public postDBLoad(container: DependencyContainer): void 
     {
-        this.logger.debug(`[${this.mod}] postDb Loading... `);
+        this.logger.explicitInfo(`[${this.mod}] postDb Loading... `);
+
+        // Initialize BrokerPriceManager with it's caches.
+        BrokerPriceManager.getInstance(container);
 
         // Resolve SPT classes we'll use
         const databaseServer: DatabaseServer = container.resolve<DatabaseServer>("DatabaseServer");
@@ -96,7 +93,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
 
         this.addTraderToLocales(tables, baseJson.name, baseJson.name, baseJson.nickname, baseJson.location, "This is the cat shop");
 
-        this.logger.debug(`[${this.mod}] postDb Loaded`);
+        this.logger.explicitInfo(`[${this.mod}] postDb Loaded`);
     }
 
     /**
@@ -132,7 +129,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
      */
     
     // rome-ignore lint/suspicious/noExplicitAny: traderDetailsToAdd comes from base.json, so no type
-    private  addTraderToDb(traderDetailsToAdd: any, tables: IDatabaseTables, jsonUtil: JsonUtil): void
+    private addTraderToDb(traderDetailsToAdd: any, tables: IDatabaseTables, jsonUtil: JsonUtil): void
     {
         // Add trader to trader table, key is the traders id
         tables.traders[traderDetailsToAdd._id] = {

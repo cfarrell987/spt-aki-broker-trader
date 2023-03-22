@@ -13,16 +13,21 @@ import modConfig from "../config/config.json";
  *      } 
  * }
  * 
- * Version 230309
+ * Version 230322
  */
 class VerboseLogger 
 {
-    private logger: ILogger;
-    private verbose: boolean;
+    private _logger: ILogger;
+    private _verbose: boolean;
     constructor(container: DependencyContainer) 
     {
-        this.logger = container.resolve<ILogger>("WinstonLogger");
-        this.verbose = modConfig.logger.verbose;
+        this._logger = container.resolve<ILogger>("WinstonLogger");
+        this._verbose = modConfig.logger.verbose;
+    }
+
+    public get isVerboseEnabled(): boolean
+    {
+        return this._verbose;
     }
 
     private format(...args: any[]): string 
@@ -52,73 +57,73 @@ class VerboseLogger
 
     public log(args: string | any[], color: string, backgroundColor?: string): void 
     {
-        if (this.verbose) 
+        if (this._verbose) 
         {
             if (Array.isArray(args))
-                this.logger.log(this.format(...args), color, backgroundColor);
+                this._logger.log(this.format(...args), color, backgroundColor);
             else
-                this.logger.log(args, color, backgroundColor);
+                this._logger.log(args, color, backgroundColor);
         }
     }
 
     public info(...args: any[]): void 
     {
-        if (this.verbose) 
+        if (this._verbose) 
         {
-            this.logger.info(this.format(...args));
+            this._logger.info(this.format(...args));
         }
     }
 
     public warning(...args: any[]): void 
     {
-        if (this.verbose) 
+        if (this._verbose) 
         {
-            this.logger.warning(this.format(...args));
+            this._logger.warning(this.format(...args));
         }
     }
 
     public error(...args: any[]): void 
     {
-        if (this.verbose) 
+        if (this._verbose) 
         {
-            this.logger.error(this.format(...args));
+            this._logger.error(this.format(...args));
         }
     }
 
     public success(...args: any[]): void 
     {
-        if (this.verbose) 
+        if (this._verbose) 
         {
-            this.logger.success(this.format(...args));
+            this._logger.success(this.format(...args));
         }
     }
 
     public explicitLog(args: string | any[], color: string, backgroundColor?: string): void 
     {
         if (Array.isArray(args))
-            this.logger.log(this.format(...args), color, backgroundColor);
+            this._logger.log(this.format(...args), color, backgroundColor);
         else
-            this.logger.log(args, color, backgroundColor);
+            this._logger.log(args, color, backgroundColor);
     }
 
     public explicitInfo(...args: any[]): void 
     {
-        this.logger.info(this.format(...args));
+        this._logger.info(this.format(...args));
     }
 
     public explicitWarning(...args: any[]): void 
     {
-        this.logger.warning(this.format(...args));
+        this._logger.warning(this.format(...args));
     }
 
     public explicitError(...args: any[]): void 
     {
-        this.logger.error(this.format(...args));
+        this._logger.error(this.format(...args));
     }
 
     public explicitSuccess(...args: any[]): void 
     {
-        this.logger.success(this.format(...args));
+        this._logger.success(this.format(...args));
     }
 
 }
