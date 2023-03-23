@@ -29,6 +29,11 @@ import { MyCustomLauncherCallbacks } from "./testoverride";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { VerboseLogger } from "./verbose_logger";
 import { BrokerPriceManager } from "./broker_price_manager";
+import { Traders } from "@spt-aki/models/enums/Traders";
+import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
+import { TraderAssortHelper } from "@spt-aki/helpers/TraderAssortHelper";
+import { TraderAssortService } from "@spt-aki/services/TraderAssortService";
+import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 
 class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
 {
@@ -88,10 +93,26 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         // Get a reference to the database tables
         const tables = databaseServer.getTables();
 
+        const brokerBase = {...baseJson};
+        // Ignore config "items_buy" and merge all buy categories from other traders.
+        brokerBase.items_buy.category = [];
+        brokerBase.items_buy.id_list = [];
+        for (const tId of Object.values(BrokerPriceManager.instance.supportedTraders))
+        {
+            const trader = tables.traders[tId];
+            // if (trader == undefined) console.log(`[TRADER BASE] ${tId}`);
+            brokerBase.items_buy.category = brokerBase.items_buy.category.concat(trader.base.items_buy.category);
+            brokerBase.items_buy.id_list = brokerBase.items_buy.id_list.concat(trader.base.items_buy.id_list);
+        }
         // Add new trader to the trader dictionary in DatabaseServer
         this.addTraderToDb(baseJson, tables, jsonUtil);
 
-        this.addTraderToLocales(tables, baseJson.name, baseJson.name, baseJson.nickname, baseJson.location, "A broker. DESC");
+        const brokerDesc = 
+            "Before the conflict he worked at one of the largest exchanges in Russia. "+
+            "At some point, he decided to move to the Norvinsk Special Economic Zone in pursuit of alluring opportunities. "+
+            "Now he provides brokerage services at Tarkov's central market.";
+
+        this.addTraderToLocales(tables, `${baseJson.name} ${baseJson.surname}`, baseJson.name, baseJson.nickname, baseJson.location, brokerDesc);
 
         this.logger.explicitInfo(`[${this.mod}] postDb Loaded`);
     }
@@ -107,7 +128,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         const imageFilepath = `./${preAkiModLoader.getModPath(`Nightingale-brokertrader-${modInfo.version}`)}res`;
 
         // Register a route to point to the profile picture
-        imageRouter.addRoute(baseJson.avatar.replace(".jpg", ""), `${imageFilepath}/broker.jpg`);
+        imageRouter.addRoute(baseJson.avatar.replace(".jpg", ""), `${imageFilepath}/broker_portrait.jpg`);
     }
 
     /**
@@ -157,13 +178,26 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
             loyal_level_items: {}
         }
 
-        const MILK_ID = "575146b724597720a27126d5"; // Can find item ids in `database\templates\items.json`
+        const traderHelper = BrokerPriceManager.instance.container.resolve<TraderHelper>(TraderHelper.name);
+        const dollarsId = "5696686a4bdc2da3298b456a";
+        const eurosId = "569668774bdc2da2298b4568";
+
+        // Get USD and EUR prices from PK and Skier assorts
+        const pkAssort = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER);
+        const pkUsdItemId = pkAssort.items.find(item => item._tpl === dollarsId)._id;
+        const pkDollarPrice = pkAssort.barter_scheme[pkUsdItemId][0][0].count;
+
+        const skiAssort = traderHelper.getTraderAssortsById(Traders.SKIER);
+        const skiEurItemId = skiAssort.items.find(item => item._tpl === eurosId)._id;
+        const skiEuroPrices = skiAssort.barter_scheme[skiEurItemId][0][0].count;
+        
         // View function documentation for what all the parameters are
-        this.addSingleItemToAssort(assortTable, MILK_ID, true, 9999999, 1, Money.ROUBLES, 1);
+        this.addSingleItemToAssort(assortTable, dollarsId, true, 9999999, 1, Money.ROUBLES, pkDollarPrice);
+        this.addSingleItemToAssort(assortTable, eurosId, true, 9999999, 1, Money.ROUBLES, skiEuroPrices);
 
         // Get the mp133 preset and add to the traders assort (Could make your own Items[] array, doesnt have to be presets)
-        const mp133GunPreset = tables.globals.ItemPresets["584148f2245977598f1ad387"]._items;
-        this.addCollectionToAssort(jsonUtil, assortTable, mp133GunPreset, false, 5, 1, Money.ROUBLES, 500);
+        // const mp133GunPreset = tables.globals.ItemPresets["584148f2245977598f1ad387"]._items;
+        // this.addCollectionToAssort(jsonUtil, assortTable, mp133GunPreset, false, 5, 1, Money.ROUBLES, 500);
 
         return assortTable;
     }

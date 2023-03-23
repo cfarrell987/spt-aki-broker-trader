@@ -25,16 +25,18 @@
     "items_buy_prohibited": {
         "id_list": [
             "5449016a4bdc2d6f028b456f",
+            "5696686a4bdc2da3298b456a",
+            "569668774bdc2da2298b4568",
             "62e910aaf957f2915e0a5e36"
         ],
         "category": []
     },
     "customization_seller": false,
-    "name": "<Real name unknown>",
-    "surname": " ",
+    "name": "Leonid",
+    "surname": "D. Karpov",
     "nickname": "Broker",
     "location": "Tarkov's central market",
-    "avatar": "/files/trader/avatar/broker11.jpg",
+    "avatar": "/files/trader/avatar/broker_portrait.jpg",
     "balance_rub": 7000000,
     "balance_dol": 700000,
     "balance_eur": 0,
