@@ -20,7 +20,15 @@ import modInfo from "../package.json";
 import modConfig from "../config/config.json";
 import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
 
+import * as fs from "fs";
+import * as path from "path";
 
+interface BrokerPriceManagerCache
+{
+    tradersMetaData: TradersMetaData;
+    itemTraderTable: Record<string, TraderBaseData>;
+    itemRagfairPriceTable: Record<string, ItemRagfairPrice>;
+}
 class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
@@ -73,18 +81,71 @@ class BrokerPriceManager
         // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
 
         // Generate tables after all dependencies are resolved.
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating caches...`);
+        // Use cache to speed up server load time on next start ups.
+        const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
+        const cacheFullPath = path.normalize(path.resolve(`${__dirname}/../cache/cache.json`));
+        console.log(cacheFullPath);
+        if (fs.existsSync(cacheFullPath))
+        {
+            this.tryToLoadCache(cacheFullPath);
+        }
+        else 
+        {
+            this.generateCache();
+            this.tryToSaveCache(cacheDir, cacheFullPath);         
+        }
+    }
 
+    private generateCache(): void
+    {
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating cache...`);
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Traders Meta Data...`);
         this._tradersMetaData = this.getTradersMetaData();
-
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Trader Table...`);
         this._itemTraderTable = this.getItemTraderTable();
-
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
         this._itemRagfairPriceTable = this.getFreshItemRagfairPriceTable();
-        console.log(`[${modInfo.name} ${modInfo.version}] Caches generation completed.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Cache generation completed.`);
+    }
 
+    private tryToSaveCache(absCacheDir: string, absCacheFullPath: string): void
+    {
+        console.log(`[${modInfo.name} ${modInfo.version}] Saving cache...`);
+        try 
+        {
+            const bpmCache: BrokerPriceManagerCache = {
+                tradersMetaData: this._tradersMetaData,
+                itemTraderTable: this._itemTraderTable,
+                itemRagfairPriceTable: this._itemRagfairPriceTable
+            }
+            fs.mkdirSync(absCacheDir);
+            fs.writeFileSync(absCacheFullPath, JSON.stringify(bpmCache), {flag: "w"});
+        }
+        catch (error) 
+        {
+            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't save cache.`);
+        }
+        console.log(`[${modInfo.name} ${modInfo.version}] Cache successfully saved.`);
+    }
+
+    private tryToLoadCache(absCacheFullPath: string): void
+    {
+        console.log(`[${modInfo.name} ${modInfo.version}] Loading cache...`);
+        try 
+        {
+            const bpmCache = JSON.parse(fs.readFileSync(absCacheFullPath, {flag: "r"}).toString()) as BrokerPriceManagerCache;
+            this._tradersMetaData = bpmCache.tradersMetaData;
+            this._itemTraderTable = bpmCache.itemTraderTable;
+            this._itemRagfairPriceTable = bpmCache.itemRagfairPriceTable;
+            console.log("CACHE:");
+            console.log(`${JSON.stringify(bpmCache)}`);
+        }
+        catch (error) 
+        {
+            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't load cache from file. Please remove cache file if it exists, to resave the cache next time you launch the server.`);
+            this.generateCache();
+        }
+        console.log(`[${modInfo.name} ${modInfo.version}] Cache successfully loaded.`);
     }
 
     public static getInstance(container?: DependencyContainer): BrokerPriceManager
