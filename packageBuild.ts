@@ -47,7 +47,8 @@ const ignoreList = [
     "package-lock.json",
     "tsconfig.json",
     "README.md",
-    "Readme.docx"
+    "Readme.docx",
+    "portrait_options/"
 ];
 const exclude = glob.sync(`{${ignoreList.join(",")}}`, { realpath: true, dot: true });
 

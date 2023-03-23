@@ -1,5 +1,6 @@
 {
     "logger": {
         "verbose": false
-    }
+    },
+    "ragfairAccountForAttachments": false
 }

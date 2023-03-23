@@ -1,5 +1,5 @@
 {
-    "_id": "cat",
+    "_id": "broker-trader",
     "working": true,
     "availableInRaid": false,
     "items_buy": {
@@ -34,7 +34,7 @@
     "surname": " ",
     "nickname": "Broker",
     "location": "Tarkov's central market",
-    "avatar": "/files/trader/avatar/cat.jpg",
+    "avatar": "/files/trader/avatar/broker11.jpg",
     "balance_rub": 7000000,
     "balance_dol": 700000,
     "balance_eur": 0,

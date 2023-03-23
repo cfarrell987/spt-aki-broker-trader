@@ -35,6 +35,9 @@ import { VerboseLogger } from "./verbose_logger";
 import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { LogBackgroundColor } from "@spt-aki/models/spt/logging/LogBackgroundColor";
+import { NotifierHelper } from "@spt-aki/helpers/NotifierHelper";
+import { NotificationSendHelper } from "@spt-aki/helpers/NotificationSendHelper";
+import { DialogueHelper } from "@spt-aki/helpers/DialogueHelper";
 
 @injectable()
 export class BrokerTradeController extends TradeController
@@ -99,7 +102,10 @@ export class BrokerTradeController extends TradeController
                         // Logging section
                         if (tReqData.isFleaMarket)
                             verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. Profit: ${tReqData.totalProfit}. Price: ${tReqData.totalPrice} RUB. Tax: ${tReqData.totalTax} RUB`
+                                `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. `+ 
+                                `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
+                                `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
+                                `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB)`
                             );
                         else 
                         {
@@ -107,7 +113,10 @@ export class BrokerTradeController extends TradeController
                             const usdPrice = handbookHelper.fromRUB(rubPrice, "5696686a4bdc2da3298b456a");
                             const eurPrice = handbookHelper.fromRUB(rubPrice, "569668774bdc2da2298b4568");
                             verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. Profit ${rubPrice} RUB (In USD: ${usdPrice} | In EUR: ${eurPrice})`
+                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. `+
+                                `Profit ${BrokerPriceManager.getNumberWithSpaces(rubPrice)} RUB (`+
+                                `In USD: ${BrokerPriceManager.getNumberWithSpaces(usdPrice)} | `+
+                                `In EUR: ${BrokerPriceManager.getNumberWithSpaces(eurPrice)})`
                             );
                         }
     

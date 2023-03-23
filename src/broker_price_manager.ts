@@ -17,6 +17,7 @@ import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
+import modConfig from "../config/config.json";
 import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
 
 
@@ -73,12 +74,16 @@ class BrokerPriceManager
 
         // Generate tables after all dependencies are resolved.
         console.log(`[${modInfo.name} ${modInfo.version}] Generating caches...`);
+
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating Traders Meta Data...`);
         this._tradersMetaData = this.getTradersMetaData();
-        console.log(`[${modInfo.name} ${modInfo.version}] Generated Traders Meta Data.`);
+
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Trader Table...`);
         this._itemTraderTable = this.getItemTraderTable();
-        console.log(`[${modInfo.name} ${modInfo.version}] Generated Item Trader Table.`);
+
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
         this._itemRagfairPriceTable = this.getFreshItemRagfairPriceTable();
-        console.log(`[${modInfo.name} ${modInfo.version}] Generated Item Ragfair Price Table.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Caches generation completed.`);
 
     }
 
@@ -205,7 +210,10 @@ class BrokerPriceManager
     {
         const bestTrader = this.getBestTraderForItem(item);
         const traderPrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
-        const ragfairPrice = this.getItemRagfairPrice(item, pmcData);  
+        // ragfairAccountForAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
+        // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in SPT-AKI
+        // some random, even default weapon attachments have unreasonable price on flea.
+        const ragfairPrice =  modConfig.ragfairAccountForAttachments ? this.getItemRagfairPrice(item, pmcData) : this.getSingleItemRagfairPrice(item);  
         // console.log(`[traderPrice] ${traderPrice}`);      
         // console.log(`[ragfairPrice] ${ragfairPrice}`);      
         // console.log(`[TAX] ${this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)}`);
@@ -355,6 +363,44 @@ class BrokerPriceManager
     }
 
     /**
+     * Get the Original Max Points value (MaxDurbility/MaxResource etc.) from the database. 
+     * 
+     * Return value is checked for falsey value and if so - returns 1 to preserve calculations.
+     * E.g.: If item wasn't found, or if found value is 0, or item has no points property at all.
+     * @param itemTplId Item Template Id
+     * @returns Original Max Points value, from item template in the database
+     */
+    public getOriginalMaxPointsByItemTplId(itemTplId: string): number
+    {
+        // Check if item is descendant of any class that have points(durability/resource)
+        const itemBaseClassWithPointsId = Object.values(BaseClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
+        const itemTpl = this.dbItems[itemTplId];
+        if (itemTpl == undefined)
+        {
+            console.log("[BrokerPriceManager] Couldn't find item in database (getOriginalMaxPointsByItemTplId). Defaulting to 1");
+            return 1;
+        }
+        switch (itemBaseClassWithPointsId)
+        {
+            case BaseClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
+            case BaseClassesWithPoints.WEAPON:{
+                return itemTpl._props.MaxDurability || 1;
+            }
+            case BaseClassesWithPoints.FOOD_DRINK:{
+                return itemTpl._props.MaxResource || 1;
+            }
+            case BaseClassesWithPoints.MEDS:{
+                return itemTpl._props.MaxHpResource || 1;
+            }
+            case BaseClassesWithPoints.BARTER_ITEM:{
+                return itemTpl._props.MaxResource || 1;
+            }
+            default:
+                return 1;
+        }
+    }
+
+    /**
      * @deprecated Not implemented.
      * @param itemId 
      * @returns 
@@ -417,7 +463,8 @@ class BrokerPriceManager
             const itemPrice = sellDesicion.price; 
             const sellProfit = itemPrice - itemTax;
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
-            const fullItemCount = this.getFullItemCount(inventoryItem, pmcData); // might be unnessecary and performance intensive
+            // No need to stress the database and count every child when we ignore item children, due to how getFullItemCont works.
+            const fullItemCount = modConfig.ragfairAccountForAttachments ? this.getFullItemCount(inventoryItem, pmcData) : itemStackObjectsCount; // might be unnessecary and performance intensive
             if (accum[groupByTraderId] == undefined)
             {
                 // Creating new group
@@ -479,17 +526,25 @@ class BrokerPriceManager
      */
     public getSingleItemTraderPrice(item: Item, traderId: string): number
     {
+        // BEAR DOGTAG - "59f32bb586f774757e1e8442"
+        // USEC DOGTAG - "59f32c3b86f77472a31742f0"
         const tplPrice = this.getItemTplTraderPrice(item._tpl, traderId);
+        if (item._tpl === "59f32bb586f774757e1e8442" || item._tpl === "59f32c3b86f77472a31742f0")
+        {
+            // Shouldn't need rounding
+            return tplPrice * this.getDogtagLevel(item);
+        }
         const pointsData = this.getItemPointsData(item);
         // console.log(`[tplPrice] ${JSON.stringify(tplPrice)}`);
         // console.log(`[pointsData] ${JSON.stringify(pointsData)}`);
-        return this.isOfRepairableBaseClass(item._tpl) 
+        if (this.isOfRepairableBaseClass(item._tpl))
             // for repairable items approximate based on current Max Durability
             // although it won't account for current durability, game balance impact should be negligible.
-            ? Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentMaxPoints) * this.getItemStackObjectsCount(item)
+            return Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentMaxPoints) * this.getItemStackObjectsCount(item)
+        else
             // for others(food/drink/meds) calculate based on currentPoints - seeems 100% accurate.
             // if item doesn't have points (stims/barter items) maxPoints and currentPoints will = 1
-            : Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentPoints) * this.getItemStackObjectsCount(item); 
+            return Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentPoints) * this.getItemStackObjectsCount(item); 
     }
 
     public getItemTraderPrice(item: Item, traderId: string, pmcData: IPmcData): number
@@ -526,14 +581,12 @@ class BrokerPriceManager
      */
     private getFreshItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
     {
-        let itemOrigMaxPts = 1;
         // Collect offers with at least 85% durability/resource (if item has no points properties - its valid) and no sellInOnePiece
         // no sellInOnePiece is important - fully operational weapons with mods are sold with sellInOnePiece = true, here we need individual items only.
         const validOffersForItemTpl = this.ragfairOfferService.getOffersOfType(itemTplId)?.filter(offer => 
         {         
             const firstItem = offer.items[0];
             const pointsData = this.getItemPointsData(firstItem);
-            itemOrigMaxPts = pointsData.OriginalMaxPoints;
             const originalMaxPtsBoundary = pointsData.OriginalMaxPoints * 0.85; // 85% of max capacity
             const hasMoreThan85PercentPoints = pointsData.currentPoints >= originalMaxPtsBoundary && pointsData.currentMaxPoints >= originalMaxPtsBoundary;
             return !offer.sellInOnePiece && hasMoreThan85PercentPoints;
@@ -552,7 +605,7 @@ class BrokerPriceManager
         // }
         return {
             avgPrice: Math.round(avgPrice),
-            pricePerPoint: Math.round(avgPrice / itemOrigMaxPts)
+            pricePerPoint: Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))
         };
     }
 
@@ -569,6 +622,7 @@ class BrokerPriceManager
     public getItemRagfairPrice(item: Item, pmcData: IPmcData): number
     {
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+        console.log(`[ITEM AND CHILDREN] ${JSON.stringify(itemAndChildren)}`)
         return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemRagfairPrice(curr), 0);
     }
 
@@ -587,6 +641,11 @@ class BrokerPriceManager
         return item.upd?.StackObjectsCount ?? 1;
     }
 
+    public getDogtagLevel(item: Item): number
+    {
+        return item.upd?.Dogtag.Level ?? 1;
+    }
+
     /**
      * Looking for children is pretty intensive, maybe shouldn't be used, since I only intend to use it for logging.
      * @param item 
@@ -597,6 +656,18 @@ class BrokerPriceManager
     {
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
         return itemAndChildren.reduce((accum, curr) => accum + this.getItemStackObjectsCount(curr), 0);
+    }
+
+    /**
+     * Formats a number with spaces. (Separates thousands)
+     * @param input Number you want to format.
+     * @returns Formatted string with spaces.
+     */
+    public static getNumberWithSpaces(input: number): string 
+    {
+        const parts = input.toString().split(".");
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+        return parts.join(".");
     }
 
     // public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number{

@@ -91,7 +91,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         // Add new trader to the trader dictionary in DatabaseServer
         this.addTraderToDb(baseJson, tables, jsonUtil);
 
-        this.addTraderToLocales(tables, baseJson.name, baseJson.name, baseJson.nickname, baseJson.location, "This is the cat shop");
+        this.addTraderToLocales(tables, baseJson.name, baseJson.name, baseJson.nickname, baseJson.location, "A broker. DESC");
 
         this.logger.explicitInfo(`[${this.mod}] postDb Loaded`);
     }
@@ -104,10 +104,10 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
     private registerProfileImage(preAkiModLoader: PreAkiModLoader, imageRouter: ImageRouter): void
     {
         // Reference the mod "res" folder
-        const imageFilepath = `./${preAkiModLoader.getModPath(this.mod)}res`;
+        const imageFilepath = `./${preAkiModLoader.getModPath(`Nightingale-brokertrader-${modInfo.version}`)}res`;
 
         // Register a route to point to the profile picture
-        imageRouter.addRoute(baseJson.avatar.replace(".jpg", ""), `${imageFilepath}/cat.jpg`);
+        imageRouter.addRoute(baseJson.avatar.replace(".jpg", ""), `${imageFilepath}/broker.jpg`);
     }
 
     /**
