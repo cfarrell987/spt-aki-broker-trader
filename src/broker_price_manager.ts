@@ -5,12 +5,12 @@ import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
 import { IHandbookBase } from "@spt-aki/models/eft/common/tables/IHandbookBase";
 import { ITemplateItem } from "@spt-aki/models/eft/common/tables/ITemplateItem";
 import { IItemBuyData, ITrader } from "@spt-aki/models/eft/common/tables/ITrader";
-import { IProcessSellTradeRequestData, Item as SellDataItem } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
+import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
 import { Traders } from "@spt-aki/models/enums/Traders"
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
 import { DependencyContainer, container as tsyringeContainer } from "tsyringe";
-import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
+import { Item } from "@spt-aki/models/eft/common/tables/IItem";
 import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
 import { RagfairTaxHelper } from "@spt-aki/helpers/RagfairTaxHelper";
 import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
@@ -22,6 +22,7 @@ import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
 
 import * as fs from "fs";
 import * as path from "path";
+import { PaymentHelper } from "@spt-aki/helpers/PaymentHelper";
 
 interface BrokerPriceManagerCache
 {
@@ -29,6 +30,20 @@ interface BrokerPriceManagerCache
     itemTraderTable: Record<string, TraderBaseData>;
     itemRagfairPriceTable: Record<string, ItemRagfairPrice>;
 }
+
+enum BaseClassesWithPoints 
+    {
+    ARMORED_EQUIPMENT = "57bef4c42459772e8d35a53b",
+    MEDS = "543be5664bdc2dd4348b4569",
+    FOOD_DRINK = "543be6674bdc2df1348b4569",
+    WEAPON = "5422acb9af1c889c16000029",
+    BARTER_ITEM = "5448eb774bdc2d0a728b4567"
+    // fuel cans, water/air fiters in spt-aki, at least as of 3.5.3
+    // inside the flea offer don't seem to contain the "item.upd.Resource" property
+    // so it resource points seem unaccounted for. And also all offers with them are 100% condition.
+    // But when calculating trader sell prices it needs to be accounted for.
+}
+
 class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
@@ -37,6 +52,7 @@ class BrokerPriceManager
 
     private handbook: IHandbookBase;
     private handbookHelper: HandbookHelper; // Using with hydrateLookup() might be good to check if items exist in handbook and find their ragfair avg price
+    private paymentHelper: PaymentHelper;
     private itemHelper: ItemHelper;
     private itemBaseClassService: ItemBaseClassService;
     private ragfairServerHelper: RagfairServerHelper; // Mb remove in the future
@@ -62,6 +78,7 @@ class BrokerPriceManager
 
         this.itemHelper = container.resolve<ItemHelper>("ItemHelper");
         this.handbookHelper = container.resolve<HandbookHelper>("HandbookHelper");
+        this.paymentHelper = container.resolve<PaymentHelper>("PaymentHelper");
         this.itemBaseClassService = container.resolve<ItemBaseClassService>("ItemBaseClassService");
         this.ragfairServerHelper = container.resolve<RagfairServerHelper>("RagfairServerHelper");
         this.ragfairPriceService = container.resolve<RagfairPriceService>("RagfairPriceService");
@@ -91,26 +108,26 @@ class BrokerPriceManager
         }
         else 
         {
-            this.generateCache();
+            this.generateLookUpTables();
             this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
     }
 
-    private generateCache(): void
+    private generateLookUpTables(): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating cache...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating look-up tables...`);
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Traders Meta Data...`);
         this._tradersMetaData = this.getTradersMetaData();
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Trader Table...`);
         this._itemTraderTable = this.getItemTraderTable();
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
         this._itemRagfairPriceTable = this.getFreshItemRagfairPriceTable();
-        console.log(`[${modInfo.name} ${modInfo.version}] Cache generation completed.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables generation completed.`);
     }
 
     private tryToSaveCache(absCacheDir: string, absCacheFullPath: string): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Saving cache...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Saving look-up tables to cache...`);
         try 
         {
             const bpmCache: BrokerPriceManagerCache = {
@@ -123,14 +140,14 @@ class BrokerPriceManager
         }
         catch (error) 
         {
-            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't save cache.`);
+            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't save to cache.`);
         }
-        console.log(`[${modInfo.name} ${modInfo.version}] Cache successfully saved.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables successfully cached.`);
     }
 
     private tryToLoadCache(absCacheFullPath: string): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Loading cache...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Loading look-up tables from cache...`);
         try 
         {
             const bpmCache = JSON.parse(fs.readFileSync(absCacheFullPath, {flag: "r"}).toString()) as BrokerPriceManagerCache;
@@ -142,10 +159,10 @@ class BrokerPriceManager
         }
         catch (error) 
         {
-            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't load cache from file. Please remove cache file if it exists, to resave the cache next time you launch the server.`);
-            this.generateCache();
+            console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't load look-up tables from cache. Please remove cache file if it exists, to resave the cache next time you launch the server.`);
+            this.generateLookUpTables();
         }
-        console.log(`[${modInfo.name} ${modInfo.version}] Cache successfully loaded.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables successfully loaded from cache.`);
     }
 
     public static getInstance(container?: DependencyContainer): BrokerPriceManager
@@ -271,10 +288,10 @@ class BrokerPriceManager
     {
         const bestTrader = this.getBestTraderForItem(item);
         const traderPrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
-        // ragfairAccountForAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
+        // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
         // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in SPT-AKI
         // some random, even default weapon attachments have unreasonable price on flea.
-        const ragfairPrice =  modConfig.ragfairAccountForAttachments ? this.getItemRagfairPrice(item, pmcData) : this.getSingleItemRagfairPrice(item);  
+        const ragfairPrice = modConfig.ragfairIgnoreAttachments ? this.getSingleItemRagfairPrice(item) : this.getItemRagfairPrice(item, pmcData);  
         // console.log(`[traderPrice] ${traderPrice}`);      
         // console.log(`[ragfairPrice] ${ragfairPrice}`);      
         // console.log(`[TAX] ${this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)}`);
@@ -481,14 +498,22 @@ class BrokerPriceManager
         return undefined;
     }
 
+    /**
+     * Check if item can be sold on flea market.
+     * 
+     * Uses "ragfairServerHelper.isItemValidRagfairItem". If "ragfairIgnoreFoundInRaid" config value is set to true - true will always be passed into "spawnedInSession" parameter.
+     * @param item Item to check.
+     * @returns true | false - can the item be sold on flea?
+     */
     public canSellOnFlea(item: Item): boolean
     {
         // const itemTpl = this.itemHelper.getItem(item._tpl)[1]; - keep it here if I move to itemHelper later
         const itemTpl = this.dbItems[item._tpl];
-        // const founInRaid = item.upd?.SpawnedInSession ?? false;
+        const foundInRaid = modConfig.ragfairIgnoreFoundInRaid || (item.upd?.SpawnedInSession ?? false);
         // console.log(item.upd?.SpawnedInSession ?? false);
+
         // The first boolean param seems to refer to "spawnedInSession"(found in raid)
-        return this.ragfairServerHelper.isItemValidRagfairItem([item.upd?.SpawnedInSession ?? false, itemTpl]);
+        return this.ragfairServerHelper.isItemValidRagfairItem([foundInRaid, itemTpl]);
     }
 
     // Or use handbookHelper.getTemplatePrice
@@ -499,13 +524,13 @@ class BrokerPriceManager
     }
 
     /**
-     * Checks if user level fits the flea requirement.
+     * Checks if user level fits the flea requirement. If "ragfairIgnorePlayerLevel" config value is true - always returns true.
      * @param pmcData PMC profile data
      * @returns true | false. Does user have the level to use flea?
      */
     public playerCanUseFlea(pmcData: IPmcData): boolean
     {
-        return pmcData.Info.Level >= this.dbServer.getTables().globals.config.RagFair.minUserLevel;
+        return modConfig.ragfairIgnorePlayerLevel || (pmcData.Info.Level >= this.dbServer.getTables().globals.config.RagFair.minUserLevel);
     }
 
     // inventory items are required to check for "item.upd.spawnedInSession"
@@ -523,9 +548,10 @@ class BrokerPriceManager
             // console.log(`[ITEM TAX] ${itemTax}`);
             const itemPrice = sellDesicion.price; 
             const sellProfit = itemPrice - itemTax;
+            const requestPrice = this.convertRoublesToTraderCurrency(sellProfit, groupByTraderId);
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
-            // No need to stress the database and count every child when we ignore item children, due to how getFullItemCont works.
-            const fullItemCount = modConfig.ragfairAccountForAttachments ? this.getFullItemCount(inventoryItem, pmcData) : itemStackObjectsCount; // might be unnessecary and performance intensive
+            // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
+            const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
             if (accum[groupByTraderId] == undefined)
             {
                 // Creating new group
@@ -541,7 +567,7 @@ class BrokerPriceManager
                     requestBody: {
                         Action: sellData.Action,
                         items: [currItem],
-                        price: sellProfit, // important, subtract the tax to properly calculate profit
+                        price: requestPrice, // important, subtract the tax to properly calculate profit
                         tid: groupByTraderId,
                         type: sellData.type
                     }
@@ -558,7 +584,7 @@ class BrokerPriceManager
                 accum[groupByTraderId].fullItemCount += fullItemCount;
 
                 accum[groupByTraderId].requestBody.items.push(currItem);
-                accum[groupByTraderId].requestBody.price += sellProfit; // important, subtract the tax to properly calculate profit
+                accum[groupByTraderId].requestBody.price += requestPrice; // important, subtract the tax to properly calculate profit
             }
             return accum;
         }, {} as ProcessedSellData);
@@ -731,6 +757,16 @@ class BrokerPriceManager
         return parts.join(".");
     }
 
+    public convertRoublesToTraderCurrency(roubleAmount: number, traderId: string): number
+    {
+        const trader = this.dbTraders[traderId];
+        if (trader == undefined) console.log(`[${modInfo.name} ${modInfo.version}] Error converting to trader currency. Couldn't find trader! Defaulting to RUB.`);
+        const tCurrencyTag = trader?.base?.currency ?? "RUB";
+        const currencyTpl = this.paymentHelper.getCurrency(tCurrencyTag);
+        // console.log(`[TEST CONVERION] ${currencyTpl} ${this.handbookHelper.fromRUB(roubleAmount, currencyTpl)}`);
+        return this.handbookHelper.fromRUB(roubleAmount, currencyTpl);
+    }
+
     // public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number{
     //     return this.ragfairTaxHelper.calculateTax(item, pmcData, requirementsValue, offerItemCount, sellInOnePiece);
     // }
@@ -755,19 +791,6 @@ interface TraderBaseData
 interface TradersMetaData 
 {
     [traderId: string]: TraderBaseData
-}
-
-enum BaseClassesWithPoints 
-    {
-    ARMORED_EQUIPMENT = "57bef4c42459772e8d35a53b",
-    MEDS = "543be5664bdc2dd4348b4569",
-    FOOD_DRINK = "543be6674bdc2df1348b4569",
-    WEAPON = "5422acb9af1c889c16000029",
-    BARTER_ITEM = "5448eb774bdc2d0a728b4567"
-    // fuel cans, water/air fiters in spt-aki, at least as of 3.5.3
-    // inside the flea offer don't seem to contain the "item.upd.Resource" property
-    // so it resource points seem unaccounted for. And also all offers with them are 100% condition.
-    // But when calculating trader sell prices it needs to be accounted for.
 }
 
 /**

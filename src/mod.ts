@@ -1,9 +1,7 @@
-import { DependencyContainer, InjectionToken } from "tsyringe";
+import { DependencyContainer } from "tsyringe";
 
-// SPT types
 import { IPreAkiLoadMod } from "@spt-aki/models/external/IPreAkiLoadMod";
 import { IPostDBLoadMod } from "@spt-aki/models/external/IPostDBLoadMod";
-import { ILogger } from "@spt-aki/models/spt/utils/ILogger";
 import { PreAkiModLoader } from "@spt-aki/loaders/PreAkiModLoader";
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { ImageRouter } from "@spt-aki/routers/ImageRouter";
@@ -12,27 +10,18 @@ import { ConfigTypes } from "@spt-aki/models/enums/ConfigTypes";
 import { ITraderAssort, ITraderBase } from "@spt-aki/models/eft/common/tables/ITrader";
 import { ITraderConfig, UpdateTime } from "@spt-aki/models/spt/config/ITraderConfig";
 import { JsonUtil } from "@spt-aki/utils/JsonUtil";
-import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
+import { Item } from "@spt-aki/models/eft/common/tables/IItem";
 import { IDatabaseTables } from "@spt-aki/models/spt/server/IDatabaseTables";
 import { Money } from "@spt-aki/models/enums/Money";
 import { TradeController } from "@spt-aki/controllers/TradeController";
 
-// New trader settings
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
-import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
-import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
-import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
 import { BrokerTradeController } from "./broker_trade_controller";
 import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
-import { MyCustomLauncherCallbacks } from "./testoverride";
-import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { VerboseLogger } from "./verbose_logger";
 import { BrokerPriceManager } from "./broker_price_manager";
 import { Traders } from "@spt-aki/models/enums/Traders";
-import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
-import { TraderAssortHelper } from "@spt-aki/helpers/TraderAssortHelper";
-import { TraderAssortService } from "@spt-aki/services/TraderAssortService";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 
 class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
@@ -86,8 +75,8 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
 
         // Resolve SPT classes we'll use
         const databaseServer: DatabaseServer = container.resolve<DatabaseServer>("DatabaseServer");
-        const configServer: ConfigServer = container.resolve<ConfigServer>("ConfigServer");
-        const traderConfig: ITraderConfig = configServer.getConfig(ConfigTypes.TRADER);
+        // const configServer: ConfigServer = container.resolve<ConfigServer>("ConfigServer");
+        // const traderConfig: ITraderConfig = configServer.getConfig(ConfigTypes.TRADER);
         const jsonUtil: JsonUtil = container.resolve<JsonUtil>("JsonUtil");
 
         // Get a reference to the database tables
@@ -105,10 +94,10 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
             brokerBase.items_buy.id_list = brokerBase.items_buy.id_list.concat(trader.base.items_buy.id_list);
         }
         // Add new trader to the trader dictionary in DatabaseServer
-        this.addTraderToDb(baseJson, tables, jsonUtil);
+        this.addTraderToDb(baseJson, tables, jsonUtil, container);
 
         const brokerDesc = 
-            "Before the conflict he worked at one of the largest exchanges in Russia. "+
+            "Before the conflict, he worked at one of the largest exchanges in Russia. "+
             "At some point, he decided to move to the Norvinsk Special Economic Zone in pursuit of alluring opportunities. "+
             "Now he provides brokerage services at Tarkov's central market.";
 
@@ -150,11 +139,11 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
      */
     
     // rome-ignore lint/suspicious/noExplicitAny: traderDetailsToAdd comes from base.json, so no type
-    private addTraderToDb(traderDetailsToAdd: any, tables: IDatabaseTables, jsonUtil: JsonUtil): void
+    private addTraderToDb(traderDetailsToAdd: any, tables: IDatabaseTables, jsonUtil: JsonUtil, container: DependencyContainer): void
     {
         // Add trader to trader table, key is the traders id
         tables.traders[traderDetailsToAdd._id] = {
-            assort: this.createAssortTable(tables, jsonUtil), // assorts are the 'offers' trader sells, can be a single item (e.g. carton of milk) or multiple items as a collection (e.g. a gun)
+            assort: this.createAssortTable(tables, jsonUtil, container), // assorts are the 'offers' trader sells, can be a single item (e.g. carton of milk) or multiple items as a collection (e.g. a gun)
             base: jsonUtil.deserialize(jsonUtil.serialize(traderDetailsToAdd)) as ITraderBase,
             questassort: {
                 started: {},
@@ -168,7 +157,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
      * Create assorts for trader and add milk and a gun to it
      * @returns ITraderAssort
      */
-    private createAssortTable(tables: IDatabaseTables, jsonUtil: JsonUtil): ITraderAssort
+    private createAssortTable(tables: IDatabaseTables, jsonUtil: JsonUtil, container: DependencyContainer): ITraderAssort
     {
         // Create a blank assort object, ready to have items added
         const assortTable: ITraderAssort = {
@@ -178,7 +167,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
             loyal_level_items: {}
         }
 
-        const traderHelper = BrokerPriceManager.instance.container.resolve<TraderHelper>(TraderHelper.name);
+        const traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
         const dollarsId = "5696686a4bdc2da3298b456a";
         const eurosId = "569668774bdc2da2298b4568";
 

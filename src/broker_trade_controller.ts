@@ -7,7 +7,6 @@ import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
 import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
 import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
 import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBuyTradeRequestData";
-import { IProcessRagfairTradeRequestData } from "@spt-aki/models/eft/trade/IProcessRagfairTradeRequestData";
 import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
 import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
 import { ILogger } from "@spt-aki/models/spt/utils/ILogger";
@@ -16,7 +15,7 @@ import { ConfigServer } from "@spt-aki/servers/ConfigServer";
 import { RagfairServer } from "@spt-aki/servers/RagfairServer";
 import { LocalisationService } from "@spt-aki/services/LocalisationService";
 import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
-import { container as tsyringeContainer, inject, injectable } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 
 import {RagfairController} from "@spt-aki/controllers/RagfairController";
 
@@ -25,19 +24,10 @@ import modInfo from "../package.json";
 import { RagfairSellHelper } from "@spt-aki/helpers/RagfairSellHelper";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { TProfileChanges, ProfileChange, Warning } from "@spt-aki/models/eft/itemEvent/IItemEventRouterBase";
-import { RagfairOfferHolder } from "@spt-aki/utils/RagfairOfferHolder";
 import { BrokerPriceManager } from "./broker_price_manager";
-import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
-import { RagfairServerHelper } from "@spt-aki/helpers/RagfairServerHelper";
-import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
-import { RagfairTaxHelper } from "@spt-aki/helpers/RagfairTaxHelper";
 import { VerboseLogger } from "./verbose_logger";
 import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
-import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { LogBackgroundColor } from "@spt-aki/models/spt/logging/LogBackgroundColor";
-import { NotifierHelper } from "@spt-aki/helpers/NotifierHelper";
-import { NotificationSendHelper } from "@spt-aki/helpers/NotificationSendHelper";
-import { DialogueHelper } from "@spt-aki/helpers/DialogueHelper";
 
 @injectable()
 export class BrokerTradeController extends TradeController
