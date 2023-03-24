@@ -154,8 +154,8 @@ class BrokerPriceManager
             this._tradersMetaData = bpmCache.tradersMetaData;
             this._itemTraderTable = bpmCache.itemTraderTable;
             this._itemRagfairPriceTable = bpmCache.itemRagfairPriceTable;
-            console.log("CACHE:");
-            console.log(`${JSON.stringify(bpmCache)}`);
+            // console.log("CACHE:");
+            // console.log(`${JSON.stringify(bpmCache)}`);
         }
         catch (error) 
         {
@@ -548,7 +548,7 @@ class BrokerPriceManager
             // console.log(`[ITEM TAX] ${itemTax}`);
             const itemPrice = sellDesicion.price; 
             const sellProfit = itemPrice - itemTax;
-            const requestPrice = this.convertRoublesToTraderCurrency(sellProfit, groupByTraderId);
+            const requestPrice = this.convertRoublesToTraderCurrency(sellProfit, groupByTraderId); // important. convert to target trader currency.
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
