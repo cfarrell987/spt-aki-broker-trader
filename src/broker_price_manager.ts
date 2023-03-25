@@ -94,14 +94,14 @@ class BrokerPriceManager
         {
             accum[key] = Traders[key];
             return accum;
-        }, {});
+        }, {}); // make sure it doesn't have the "broker-trader" in it, because he has a coef of 0, which allows him to accurately display his sell prices ingame
         // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
 
         // Generate tables after all dependencies are resolved.
         // Use cache to speed up server load time on next start ups.
         const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
         const cacheFullPath = path.normalize(path.resolve(`${__dirname}/../cache/cache.json`));
-        console.log(cacheFullPath);
+        // console.log(cacheFullPath);
         if (fs.existsSync(cacheFullPath))
         {
             this.tryToLoadCache(cacheFullPath);

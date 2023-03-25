@@ -48,7 +48,8 @@ const ignoreList = [
     "tsconfig.json",
     "README.md",
     "Readme.docx",
-    "portrait_options/"
+    "portrait_options/",
+    "client-side/"
 ];
 const exclude = glob.sync(`{${ignoreList.join(",")}}`, { realpath: true, dot: true });
 

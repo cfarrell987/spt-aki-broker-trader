@@ -23,6 +23,8 @@ import { VerboseLogger } from "./verbose_logger";
 import { BrokerPriceManager } from "./broker_price_manager";
 import { Traders } from "@spt-aki/models/enums/Traders";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
+import { BrokerDataCallbacks } from "./broker_data_callbacks";
+import { DataCallbacks } from "@spt-aki/callbacks/DataCallbacks";
 
 class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
 {
@@ -51,9 +53,13 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         const configServer = container.resolve<ConfigServer>("ConfigServer");
         const traderConfig: ITraderConfig = configServer.getConfig<ITraderConfig>(ConfigTypes.TRADER);
         
-        this.logger.log(TradeController.name, LogTextColor.RED);
+        // this.logger.log(TradeController.name, LogTextColor.RED);
+        // Controller override - to handle trade requests
         container.register<BrokerTradeController>(BrokerTradeController.name, BrokerTradeController);
         container.register(TradeController.name, {useToken: BrokerTradeController.name});
+        // DataCallbacks override - to handle sell price display
+        // container.register<BrokerDataCallbacks>(BrokerDataCallbacks.name, BrokerDataCallbacks);
+        // container.register(DataCallbacks.name, {useToken: BrokerDataCallbacks.name});
 
         this.registerProfileImage(preAkiModLoader, imageRouter);
         
@@ -97,8 +103,9 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         this.addTraderToDb(baseJson, tables, jsonUtil, container);
 
         const brokerDesc = 
-            "Before the conflict, he worked at one of the largest exchanges in Russia. "+
+            "Once, he worked at one of the largest exchanges in Russia. "+
             "At some point, he decided to move to the Norvinsk Special Economic Zone in pursuit of alluring opportunities. "+
+            "-> something here about the conflict providing these opportunities <-"+
             "Now he provides brokerage services at Tarkov's central market.";
 
         this.addTraderToLocales(tables, `${baseJson.name} ${baseJson.surname}`, baseJson.name, baseJson.nickname, baseJson.location, brokerDesc);
