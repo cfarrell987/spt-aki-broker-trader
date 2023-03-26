@@ -38,17 +38,19 @@ interface BrokerPriceManagerCache
     itemRagfairPriceTable: Record<string, ItemRagfairPrice>;
 }
 
-enum BaseClassesWithPoints 
+enum ClassesWithPoints 
     {
     ARMORED_EQUIPMENT = "57bef4c42459772e8d35a53b",
     MEDS = "543be5664bdc2dd4348b4569",
     FOOD_DRINK = "543be6674bdc2df1348b4569",
     WEAPON = "5422acb9af1c889c16000029",
-    BARTER_ITEM = "5448eb774bdc2d0a728b4567"
     // fuel cans, water/air fiters in spt-aki, at least as of 3.5.3
     // inside the flea offer don't seem to contain the "item.upd.Resource" property
     // so it resource points seem unaccounted for. And also all offers with them are 100% condition.
     // But when calculating trader sell prices it needs to be accounted for.
+    BARTER_ITEM = "5448eb774bdc2d0a728b4567",
+    KEY = "54009119af1c881c07000029",
+    REPAIR_KITS = "616eb7aea207f41933308f46"
 }
 
 class BrokerPriceManager 
@@ -277,7 +279,7 @@ class BrokerPriceManager
     public canBeBoughtByTrader(itemTplId: string, traderId: string ): boolean
     {
         const traderMetaData = this._tradersMetaData[traderId];
-        const item = this.dbItems[itemTplId];
+        // const item = this.dbItems[itemTplId];
         // Might use itemBaseClassService but right now seems unnecessary
         // Also a very good option is itemHelpes.isOfBaseClass, check for every category (category.some()).
         const buysItem = traderMetaData.itemsBuy.category.some(categoryId => this.itemHelper.isOfBaseclass(itemTplId, categoryId)) || traderMetaData.itemsBuy.id_list.includes(itemTplId);
@@ -403,16 +405,14 @@ class BrokerPriceManager
     public getItemPointsData(item: Item): ItemPointsData
     {
         // Check if item is descendant of any class that have points(durability/resource)
-        const itemBaseClassWithPointsId = Object.values(BaseClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(item._tpl, baseClassId));
-        const itemTpl = this.dbItems[item._tpl];
+        const itemBaseClassWithPointsId = Object.values(ClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(item._tpl, baseClassId));
         let currentPoints = 1;
         let currentMaxPoints = 1;
-        let originalMaxPoints = 1;
+        const originalMaxPoints = this.getOriginalMaxPointsByItemTplId(item._tpl);
         switch (itemBaseClassWithPointsId)
         {
-            case BaseClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
-            case BaseClassesWithPoints.WEAPON:{
-                originalMaxPoints = itemTpl._props.MaxDurability;
+            case ClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
+            case ClassesWithPoints.WEAPON:
                 // since not all descendants of baseclass might have durability/resource points
                 // and also some items (e.g. just bought from flea) might have no "upd" property
                 // so consider them brand new with full points.
@@ -424,31 +424,36 @@ class BrokerPriceManager
                     currentMaxPoints = item.upd.Repairable.MaxDurability;
                 } 
                 break;
-            }
-            case BaseClassesWithPoints.FOOD_DRINK:{
-                originalMaxPoints = itemTpl._props.MaxResource;
+            case ClassesWithPoints.FOOD_DRINK:
                 if (item.upd?.FoodDrink == undefined) 
                     currentPoints = currentMaxPoints = originalMaxPoints;
                 else
                     currentPoints = item.upd.FoodDrink.HpPercent; // not an actual percent, it's literally current resource value
                 break;
-            }
-            case BaseClassesWithPoints.MEDS:{
-                originalMaxPoints = itemTpl._props.MaxHpResource;
+            case ClassesWithPoints.MEDS:
                 if (item.upd?.MedKit == undefined) 
                     currentPoints = currentMaxPoints = originalMaxPoints;
                 else
                     currentPoints = item.upd.MedKit.HpResource;
                 break;
-            }
-            case BaseClassesWithPoints.BARTER_ITEM:{
-                originalMaxPoints = itemTpl._props.MaxResource;
+            case ClassesWithPoints.BARTER_ITEM:
                 if (item.upd?.Resource == undefined) 
                     currentPoints = currentMaxPoints = originalMaxPoints;
                 else
                     currentPoints = item.upd.Resource.Value;
                 break;
-            }
+            case ClassesWithPoints.KEY:
+                if (item.upd?.Key == undefined)
+                    currentPoints = currentMaxPoints = originalMaxPoints;
+                else
+                    currentPoints = originalMaxPoints - item.upd.Key.NumberOfUsages; // It's wacky, but for some reason NumberOfUsages = Actual Times Used
+                break;
+            case ClassesWithPoints.REPAIR_KITS:
+                if (item.upd?.RepairKit == undefined)
+                    currentPoints = currentMaxPoints = originalMaxPoints;
+                else
+                    currentPoints = item.upd.RepairKit.Resource;
+                break;
         }
         if (item.upd?.Repairable == undefined) currentMaxPoints = originalMaxPoints; // if can't be repaired, current max point capacity doesn't change (food/meds/etc.)
         return {
@@ -472,7 +477,7 @@ class BrokerPriceManager
     public getOriginalMaxPointsByItemTplId(itemTplId: string): number
     {
         // Check if item is descendant of any class that have points(durability/resource)
-        const itemBaseClassWithPointsId = Object.values(BaseClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
+        const itemBaseClassWithPointsId = Object.values(ClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
         const itemTpl = this.dbItems[itemTplId];
         if (itemTpl == undefined)
         {
@@ -481,19 +486,19 @@ class BrokerPriceManager
         }
         switch (itemBaseClassWithPointsId)
         {
-            case BaseClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
-            case BaseClassesWithPoints.WEAPON:{
+            case ClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
+            case ClassesWithPoints.WEAPON:
                 return itemTpl._props.MaxDurability || 1;
-            }
-            case BaseClassesWithPoints.FOOD_DRINK:{
+            case ClassesWithPoints.FOOD_DRINK:
                 return itemTpl._props.MaxResource || 1;
-            }
-            case BaseClassesWithPoints.MEDS:{
+            case ClassesWithPoints.MEDS:
                 return itemTpl._props.MaxHpResource || 1;
-            }
-            case BaseClassesWithPoints.BARTER_ITEM:{
+            case ClassesWithPoints.BARTER_ITEM:
                 return itemTpl._props.MaxResource || 1;
-            }
+            case ClassesWithPoints.KEY:
+                return itemTpl._props.MaximumNumberOfUsage || 1;
+            case ClassesWithPoints.REPAIR_KITS:
+                return itemTpl._props.MaxRepairResource || 1;
             default:
                 return 1;
         }
@@ -765,7 +770,7 @@ class BrokerPriceManager
 
     public isOfRepairableBaseClass(itemTplId: string): boolean
     {
-        return [BaseClassesWithPoints.ARMORED_EQUIPMENT, BaseClassesWithPoints.WEAPON].some(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
+        return [ClassesWithPoints.ARMORED_EQUIPMENT, ClassesWithPoints.WEAPON].some(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
     }
 
     public getItemStackObjectsCount(item: Item): number
