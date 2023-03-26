@@ -25,6 +25,8 @@ import { Traders } from "@spt-aki/models/enums/Traders";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 import { BrokerDataCallbacks } from "./broker_data_callbacks";
 import { DataCallbacks } from "@spt-aki/callbacks/DataCallbacks";
+import { DynamicRouterModService } from "@spt-aki/services/mod/dynamicRouter/DynamicRouterModService"
+import { BrokerTraderRouter } from "./broker_trade_router";
 
 class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod 
 {
@@ -52,14 +54,16 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");
         const configServer = container.resolve<ConfigServer>("ConfigServer");
         const traderConfig: ITraderConfig = configServer.getConfig<ITraderConfig>(ConfigTypes.TRADER);
-        
-        // this.logger.log(TradeController.name, LogTextColor.RED);
+        const routerService = container.resolve<DynamicRouterModService>(DynamicRouterModService.name);
         // Controller override - to handle trade requests
         container.register<BrokerTradeController>(BrokerTradeController.name, BrokerTradeController);
         container.register(TradeController.name, {useToken: BrokerTradeController.name});
         // DataCallbacks override - to handle sell price display
         // container.register<BrokerDataCallbacks>(BrokerDataCallbacks.name, BrokerDataCallbacks);
         // container.register(DataCallbacks.name, {useToken: BrokerDataCallbacks.name});
+
+        // Register router to handle broker-trader specific requests
+        BrokerTraderRouter.registerRouter(container);
 
         this.registerProfileImage(preAkiModLoader, imageRouter);
         

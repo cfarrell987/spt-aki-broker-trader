@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net472</TargetFramework>
     <AssemblyName>BrokerTraderPlugin</AssemblyName>
     <Description>My first plugin</Description>
     <Version>1.0.0</Version>
@@ -13,19 +13,28 @@
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" />
-    <PackageReference Include="UnityEngine.Modules" Version="0.13.0" IncludeAssets="compile" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.39" IncludeAssets="compile" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
   </ItemGroup>
-
-    <ItemGroup>
+	
+	<ItemGroup>
 		<Reference Include="Assembly-CSharp">
 			<HintPath>dependencies\Assembly-CSharp.dll</HintPath>
 		</Reference>
 		<Reference Include="Aki.Reflection">
 			<HintPath>dependencies\Aki.Reflection.dll</HintPath>
+		</Reference>
+		<Reference Include="Aki.Common">
+			<HintPath>dependencies\Aki.Common.dll</HintPath>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>dependencies\Newtonsoft.Json.dll</HintPath>
+		</Reference>
+		<Reference Include="Newtonsoft.Json.UnityConverters">
+			<HintPath>dependencies\Newtonsoft.Json.UnityConverters.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 </Project>
