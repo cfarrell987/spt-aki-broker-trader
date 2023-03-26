@@ -23,6 +23,13 @@ import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
 import * as fs from "fs";
 import * as path from "path";
 import { PaymentHelper } from "@spt-aki/helpers/PaymentHelper";
+import { MemberCategory } from "@spt-aki/models/enums/MemberCategory";
+import { Money } from "@spt-aki/models/enums/Money";
+import { PresetHelper } from "@spt-aki/helpers/PresetHelper";
+import { RagfairController } from "@spt-aki/controllers/RagfairController";
+import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
+import { ISearchRequestData, OfferOwnerType } from "@spt-aki/models/eft/ragfair/ISearchRequestData";
+import { RagfairSort } from "@spt-aki/models/enums/RagfairSort";
 
 interface BrokerPriceManagerCache
 {
@@ -55,12 +62,15 @@ class BrokerPriceManager
     private paymentHelper: PaymentHelper;
     private itemHelper: ItemHelper;
     private itemBaseClassService: ItemBaseClassService;
+    private presetHelper: PresetHelper;
     private ragfairServerHelper: RagfairServerHelper; // Mb remove in the future
     private ragfairPriceService: RagfairPriceService;
     private ragfairTaxHelper: RagfairTaxHelper;
     private ragfairOfferService: RagfairOfferService;
+    private ragfairControler: RagfairController;
+    private ragfairOfferHelper: RagfairOfferHelper;
 
-    public brokerTraderId = baseJson._id;
+    public static brokerTraderId = baseJson._id;
     
     private dbServer: DatabaseServer;
     private dbGlobals: IGlobals;
@@ -77,6 +87,7 @@ class BrokerPriceManager
         this._container = container ?? tsyringeContainer;
 
         this.itemHelper = container.resolve<ItemHelper>("ItemHelper");
+        this.presetHelper = container.resolve<PresetHelper>("PresetHelper")
         this.handbookHelper = container.resolve<HandbookHelper>("HandbookHelper");
         this.paymentHelper = container.resolve<PaymentHelper>("PaymentHelper");
         this.itemBaseClassService = container.resolve<ItemBaseClassService>("ItemBaseClassService");
@@ -84,6 +95,8 @@ class BrokerPriceManager
         this.ragfairPriceService = container.resolve<RagfairPriceService>("RagfairPriceService");
         this.ragfairTaxHelper = container.resolve<RagfairTaxHelper>("RagfairTaxHelper");
         this.ragfairOfferService = container.resolve<RagfairOfferService>("RagfairOfferService");
+        this.ragfairOfferHelper = container.resolve<RagfairOfferHelper>("RagfairOfferHelper")
+        this.ragfairControler = container.resolve<RagfairController>("RagfairController");
 
         this.dbServer = container.resolve<DatabaseServer>("DatabaseServer");
         this.dbGlobals = this.dbServer.getTables().globals;
@@ -96,9 +109,17 @@ class BrokerPriceManager
             return accum;
         }, {}); // make sure it doesn't have the "broker-trader" in it, because he has a coef of 0, which allows him to accurately display his sell prices ingame
         // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
+    }
 
-        // Generate tables after all dependencies are resolved.
-        // Use cache to speed up server load time on next start ups.
+    /**
+     * Should be used in postAkiLoad() and after the instance is initialized.
+     * Generates look-up tables.
+     * Uses cache to speed up server load time on next start ups.
+     */
+    public initializeLookUpTables(): void
+    {        
+        // BrokerPriceManager.getInstance(); - can be used as a temporary bandaid but...
+        // This method should fail if class hasn't been yet instantialized.
         const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
         const cacheFullPath = path.normalize(path.resolve(`${__dirname}/../cache/cache.json`));
         // console.log(cacheFullPath);
@@ -111,7 +132,7 @@ class BrokerPriceManager
             this.generateLookUpTables();
             this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
-    }
+    } 
 
     private generateLookUpTables(): void
     {
@@ -174,9 +195,9 @@ class BrokerPriceManager
         return this._instance;
     }
 
-    public isBrokerTraderId(traderId: string): boolean
+    public static isBrokerTraderId(traderId: string): boolean
     {
-        return this.brokerTraderId === traderId;
+        return BrokerPriceManager.brokerTraderId === traderId;
     }
 
     public get container(): DependencyContainer
@@ -299,7 +320,7 @@ class BrokerPriceManager
         if (ragfairPrice > traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
         {
             return {
-                traderId: this.brokerTraderId,
+                traderId: BrokerPriceManager.brokerTraderId,
                 price: ragfairPrice,
                 tax: this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0
             };
@@ -556,7 +577,7 @@ class BrokerPriceManager
             {
                 // Creating new group
                 accum[groupByTraderId] = {
-                    isFleaMarket: this.isBrokerTraderId(groupByTraderId),
+                    isFleaMarket: BrokerPriceManager.isBrokerTraderId(groupByTraderId),
                     traderName: this._tradersMetaData[groupByTraderId].name,
                     totalPrice: itemPrice,
                     totalTax: itemTax,
@@ -669,27 +690,50 @@ class BrokerPriceManager
     private getFreshItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
     {
         // Collect offers with at least 85% durability/resource (if item has no points properties - its valid) and no sellInOnePiece
-        // no sellInOnePiece is important - fully operational weapons with mods are sold with sellInOnePiece = true, here we need individual items only.
+
+        // sellInOnePiece check is not needed - I'll leave this as a reminder for my goofy aah
+        // took me 3 hours to realize that I checked for sellInOnePiece === false and couldn't get
+        // fully operational item offers, because a weapon preset with all the mods is sold with "sellInOnePiece" = true
+        
+        // On the other hand, why non-operational lower receivers of M4A1 cost 250k~ on flea?
+
         const validOffersForItemTpl = this.ragfairOfferService.getOffersOfType(itemTplId)?.filter(offer => 
-        {         
+        {    
+            //console.log(`[validOffersForItemTpl] ${JSON.stringify(offer.user?.memberType)}`);
             const firstItem = offer.items[0];
+            if (
+                offer.user?.memberType === MemberCategory.TRADER || // no trader offers
+                offer.items.length < 1 || // additional reliability measure
+                offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
+                this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 // no "not operational" offers 
+            ) return false;    
             const pointsData = this.getItemPointsData(firstItem);
             const originalMaxPtsBoundary = pointsData.OriginalMaxPoints * 0.85; // 85% of max capacity
             const hasMoreThan85PercentPoints = pointsData.currentPoints >= originalMaxPtsBoundary && pointsData.currentMaxPoints >= originalMaxPtsBoundary;
-            return !offer.sellInOnePiece && hasMoreThan85PercentPoints;
+            return hasMoreThan85PercentPoints; 
         });
         //console.log(`[BROKER] ${itemTplId} COUNT OFFERS => ${JSON.stringify(this.ragfairOfferService.getOffersOfType(itemTplId)?.length)}`);
         // Some items might have no offers on flea (some event stuff, e.g. jack-o-lantern) so getOffersOfType will return "undefined"
-        const avgPrice = validOffersForItemTpl != undefined 
+        const avgPrice = validOffersForItemTpl?.length > 0
             ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
             //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.
             // getDynamicPriceForItem might return "undefined" for some reason, so check for it (getStaticPriceForItem too just in case)
             : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
-        // if (itemTplId === "5e8488fa988a8701445df1e4")
+            
+        //Some Items like Santa hat/Ushanka etc. have no durability displayed, but have an actual current durability and max durability.
+        //Test how it influences their price.
+
+        // if (itemTplId === "5447a9cd4bdc2dbd208b4567")
         // {
-        //     console.log(`[getItemPointsData] ${JSON.stringify(this.getItemPointsData(validOffersForItemTpl[0].items[0]))}`)
-        //     console.log(`[itemOrigMaxPts] ${JSON.stringify(itemOrigMaxPts)}`)
-        //     console.log(`[validOffersForItemTpl] ${JSON.stringify(avgPrice)}`)
+        //     // console.log(`[MIN_AVG_MAX] ${JSON.stringify(minMaxAvg)}`);
+        //     console.log(`[Offers count] ${JSON.stringify(validOffersForItemTpl?.length)}`)
+        //     validOffersForItemTpl?.forEach(offer => 
+        //     {
+        //         console.log(`[requirements cost] ${JSON.stringify(offer.requirements)}`)
+        //         console.log(`[requirements cost] ${JSON.stringify(offer.requirementsCost)}`)
+        //     });
+        //     console.log(`[avg price] ${Math.round(avgPrice)}`)
+        //     console.log(`[per point] ${Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))}`)
         // }
         return {
             avgPrice: Math.round(avgPrice),

@@ -56,12 +56,14 @@ export class BrokerTradeController extends TradeController
             if (body.tid === baseJson._id)
             {
                 const logPrefix = `[${modInfo.name} ${modInfo.version}]`;
-                if (body.type === "buy_from_trader") 
-                {
-                    const buyRequestBody = body as IProcessBuyTradeRequestData;
-                    // this.logger.log(JSON.stringify(buyData), LogTextColor.CYAN);
-                    return this.tradeHelper.buyItem(pmcData, buyRequestBody, sessionID, foundInRaid, upd);
-                }
+                // if (body.type === "buy_from_trader") 
+                // {
+                //     const buyRequestBody = body as IProcessBuyTradeRequestData;
+                //     // this.logger.log(JSON.stringify(buyData), LogTextColor.CYAN);
+
+                //     // Remove this, since purchase action should be ignore, call super instead.
+                //     return this.tradeHelper.buyItem(pmcData, buyRequestBody, sessionID, foundInRaid, upd);
+                // }
         
                 if (body.type === "sell_to_trader") 
                 {

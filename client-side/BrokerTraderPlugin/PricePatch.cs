@@ -38,6 +38,12 @@ namespace PricePatch
             Logger.LogMessage($"[BROKER TRADER] Supported traders {PriceManager.SupportedTraderIds.Length}");
             Logger.LogMessage($"[BROKER TRADER] Item ragfair price count {PriceManager.ItemRagfairPriceTable.Count}");
             Logger.LogMessage($"[BROKER TRADER] Received {PriceManager.SupplyData.Count} SupplyData instances.");
+            //Logger.LogMessage($"[BROKER TRADER] ITEM RAGFAIR TABLE.");
+            //Logger.LogMessage($"{Json.Serialize(ItemRagfairPriceTable)}");
+            //string response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
+            //Logger.LogMessage($"{response}");
+            //Logger.LogMessage($"[BROKER TRADER] {Json.Serialize(ItemRagfairPriceTable)}");
+
             //Logger.LogMessage($"{Json.Serialize(PriceManager.SupplyData)}");
 
             // Request SupplyData from default SPT-AKI server route

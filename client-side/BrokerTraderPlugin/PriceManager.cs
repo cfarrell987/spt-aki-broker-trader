@@ -58,7 +58,7 @@ namespace BrokerTraderPlugin
         {
             RequirementsAmount = requirementsAmount;
             Price = price;
-            Tax = Tax;
+            Tax = tax;
         }
     }
 
@@ -173,7 +173,11 @@ namespace BrokerTraderPlugin
             if (item.TryGetItemComponent<KeyComponent>(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
             {
                 //requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
-                requirementsPrice = pricePerPoint * keyComponent.NumberOfUsages;
+                // IMPORTANT
+                // keyComponent.NumberOfUsages <- actually means TIMES USED, so to get NumberOfUsages "left" subtract this from MaximumNumberOfUsage
+                //
+                // bruh
+                requirementsPrice = pricePerPoint * (keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
             }
             ResourceComponent resourceComponent;
             if (item.TryGetItemComponent<ResourceComponent>(out resourceComponent) && resourceComponent.MaxResource > 0f)

@@ -6,7 +6,9 @@ import { IGetItemPricesResponse } from "@spt-aki/models/eft/game/IGetItemPricesR
 import { IGetBodyResponseData } from "@spt-aki/models/eft/httpResponse/IGetBodyResponseData";
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
 import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
+import path from "path";
 import { inject, injectable } from "tsyringe";
+import { BrokerPriceManager } from "./broker_price_manager";
 
 @injectable()
 export class BrokerDataCallbacks extends DataCallbacks 
@@ -24,27 +26,34 @@ export class BrokerDataCallbacks extends DataCallbacks
     public override getItemPrices(url: string, info: IEmptyRequestData, sessionID: string): IGetBodyResponseData<IGetItemPricesResponse> 
     {
         const result = super.getItemPrices(url, info, sessionID);
-        console.log("[URL DUMP]");
-        console.log(JSON.stringify(url));
-        console.log("[INFO DUMP]");
-        console.log(JSON.stringify(info));
-        console.log("[SESSION_ID DUMP]");
-        console.log(JSON.stringify(sessionID));
+
+        if (path.basename(url) === BrokerPriceManager.brokerTraderId)
+        {
+            //BrokerPriceManager.instance.initializeLookUpTables();
+        }
+
+        return result;
+        // console.log("[URL DUMP]");
+        // console.log(JSON.stringify(url));
+        // console.log("[INFO DUMP]");
+        // console.log(JSON.stringify(info));
+        // console.log("[SESSION_ID DUMP]");
+        // console.log(JSON.stringify(sessionID));
 
         // result returns an IGetBodyResponseData object(actually a string?) which has a function(?)
         // with parameter "data" of generic type and returns a value of the same generic type?
         // i'm confused by this but converting to string even though it's kind of a string and then parsing works, so whatever.
-        const parsedResult = JSON.parse(result.toString()) as IGetBodyResponseData<IGetItemPricesResponse>;
+        // const parsedResult = JSON.parse(result.toString()) as IGetBodyResponseData<IGetItemPricesResponse>;
         // if (prices == undefined) return result;
-        for (const item in parsedResult["data"]["prices"])
-        {
-            parsedResult["data"]["prices"][item] = 100
-            // parsedResult().prices;
-        }
-        console.log("[PARSED DUMP]");
-        console.log(parsedResult);
-        const stringifiedResult = JSON.stringify(parsedResult);
-        return stringifiedResult as unknown as IGetBodyResponseData<IGetItemPricesResponse> ;
+        // for (const item in parsedResult["data"]["prices"])
+        // {
+        //     parsedResult["data"]["prices"][item] = 100
+        //     // parsedResult().prices;
+        // }
+        // console.log("[PARSED DUMP]");
+        // console.log(parsedResult);
+        // const stringifiedResult = JSON.stringify(parsedResult);
+        // return stringifiedResult as unknown as IGetBodyResponseData<IGetItemPricesResponse> ;
         // console.log("[RESULT DUMP]");
         // console.log(JSON.stringify(parsedResult))
         // return result;
