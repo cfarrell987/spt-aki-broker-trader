@@ -78,18 +78,38 @@ namespace PricePatch
         {
             //Logger.LogInfo("PATCH EXECUTED");
             //Nullable<TradeItemPrice> nulprice = __result as Nullable<TradeItemPrice>;
-            
+
             // Only affect the Broker
-            if(__instance.Id == BROKER_TRADER_ID)
+            if (__instance.Id == BROKER_TRADER_ID)
             {
                 if (__result != null)
                 {
                     //var bestPrice = GetBestTraderPrice(item);
                     //Logger.LogInfo($"TRADER {bestPrice.Trader.LocalizedName} ROUBLE AMOUNT {bestPrice.RoubleAmount}");
                     //Logger.LogInfo(Json.Serialize(GetBestSellItemPrice(item)));
-
-
-                    __result = GetBestTraderPrice(item).Price;
+                    TraderItemPriceData traderPrice = GetBestTraderPrice(item);
+                    RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
+                    Logger.LogMessage($"[BROKER PRICE] Trader: {Json.Serialize(traderPrice.Price)} Ragfair: {Json.Serialize(ragfairPrice)}");
+                    double ragfairAmount = ragfairPrice.Price?.Amount ?? 0;
+                    //Logger.LogMessage($"[BROKER TAX] One : {GClass1969.CalculateTaxPrice(item, 1, ragfairAmount, true)}");
+                    //Logger.LogMessage($"[BROKER TAX] STACK : {GClass1969.CalculateTaxPrice(item, item.StackObjectsCount, ragfairAmount, true)}");
+                    //Logger.LogMessage($"[BROKER TAX] One : {GClass1969.CalculateTaxPrice(item, 1, ragfairAmount, false)}");
+                    //Logger.LogMessage($"[BROKER TAX] STACK : {GClass1969.CalculateTaxPrice(item, item.StackObjectsCount, ragfairAmount, false)}");
+                    if (traderPrice.Price != null && ragfairPrice.Price != null)
+                    {
+                        __result = ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles ? ragfairPrice.Price : traderPrice.Price;
+                    }
+                    else
+                    {
+                        if (traderPrice.Price != null && ragfairPrice.Price == null)
+                        {
+                            __result = traderPrice.Price;
+                        }
+                        else if (ragfairPrice.Price != null && traderPrice.Price == null)
+                        {
+                            __result = ragfairPrice.Price;
+                        }
+                    }
                     //TraderClass bestTrader = PriceManager.TradersList.First();
                     //SellItemPrice? bestPrice = PriceManager.GetUserItemPriceInRoubles(bestTrader, item);
                     //Logger.LogInfo($"First Trader Name {bestTrader.LocalizedName}");

@@ -6,12 +6,14 @@ using System.Text;
 using ItemPrice = TraderClass.GStruct219;
 using CurrencyHelper = GClass2179;
 using PriceHelper = GClass1969;
+using RepairKitComponent = GClass2384;
 using EFT;
 using UnityEngine;
 using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
 using static UnityEngine.UIElements.UIRAtlasManager;
+using Comfort.Common;
 
 namespace BrokerTraderPlugin
 {
@@ -47,11 +49,22 @@ namespace BrokerTraderPlugin
         }
     }
 
+    internal readonly struct RagfairItemPriceData
+    {
+        public readonly int RequirementsAmount { get; }
+        public readonly int Tax { get; }
+        public readonly ItemPrice? Price { get; }
+        public RagfairItemPriceData(int requirementsAmount, int tax, ItemPrice? price)
+        {
+            RequirementsAmount = requirementsAmount;
+            Price = price;
+            Tax = Tax;
+        }
+    }
+
     internal static class PriceManager
     {
-
         public static readonly string[] SupportedTraderIds = new string[0];
-
         public static Dictionary<string, RagfairPrice> ItemRagfairPriceTable { get; set; } = new Dictionary<string, RagfairPrice>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
@@ -124,6 +137,88 @@ namespace BrokerTraderPlugin
                 return new TraderItemPriceData(trader, null, -1);
             }
             return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, Convert.ToInt32(Math.Floor(amount)))), amountInRoubles); ;
+        }
+        public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
+        {
+            if (!item.CanSellOnRagfairRaidRelated || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return new RagfairItemPriceData(-1, -1, null);
+
+            double pricePerPoint = ItemRagfairPriceTable[item.TemplateId].PricePerPoint;
+            // Basically base price(avg flea price)
+            // Will be overwritten anyway.
+            // Will be used in the future if flea offer prices will follow the same price logic as trader prices.
+            double requirementsPrice = ItemRagfairPriceTable[item.TemplateId].AveragePrice;
+
+            RepairableComponent repairableComponent;
+            if (item.TryGetItemComponent(out repairableComponent))
+            {
+                // - Will be useful when Repairable prices on flea will start accounting all this
+                //
+                //double num2 = 0.01 * Math.Pow(0.0, (double)repairableComponent.MaxDurability);
+                //float num3 = Mathf.Ceil(repairableComponent.MaxDurability);
+                //float num4 = (float)item.RepairCost * (num3 - (float)Mathf.CeilToInt(repairableComponent.Durability));
+                //requirementsPrice = requirementsPrice * ((double)(num3 / (float)repairableComponent.TemplateDurability) + num2) - (double)num4;
+
+                // - As of SPT-AKI 3.5.3 Repairable items only seems to change based on current Durability, not anything else.
+                //
+                requirementsPrice = pricePerPoint * repairableComponent.Durability;
+                // Same goes for every other item.
+            }
+
+            //DogtagComponent dogtagComponent;
+            //if (item.TryGetItemComponent<DogtagComponent>(out dogtagComponent))
+            //{
+            //    requirementsPrice *= (double)dogtagComponent.Level;
+            //}
+            KeyComponent keyComponent;
+            if (item.TryGetItemComponent<KeyComponent>(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
+            {
+                //requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
+                requirementsPrice = pricePerPoint * keyComponent.NumberOfUsages;
+            }
+            ResourceComponent resourceComponent;
+            if (item.TryGetItemComponent<ResourceComponent>(out resourceComponent) && resourceComponent.MaxResource > 0f)
+            {
+                //requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)resourceComponent.MaxResource * (double)resourceComponent.Value;
+                requirementsPrice = pricePerPoint * resourceComponent.Value;
+            }
+            SideEffectComponent sideEffectComponent;
+            if (item.TryGetItemComponent<SideEffectComponent>(out sideEffectComponent) && sideEffectComponent.MaxResource > 0f)
+            {
+                //requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)sideEffectComponent.MaxResource * (double)sideEffectComponent.Value;
+                requirementsPrice = pricePerPoint * sideEffectComponent.Value;
+            }
+            MedKitComponent medKitComponent;
+            if (item.TryGetItemComponent<MedKitComponent>(out medKitComponent))
+            {
+                //requirementsPrice = requirementsPrice / (double)medKitComponent.MaxHpResource * (double)medKitComponent.HpResource;
+                requirementsPrice = pricePerPoint * medKitComponent.HpResource;
+            }
+            FoodDrinkComponent foodDrinkComponent;
+            if (item.TryGetItemComponent<FoodDrinkComponent>(out foodDrinkComponent))
+            {
+                //requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * (double)foodDrinkComponent.HpPercent;
+                requirementsPrice = pricePerPoint * foodDrinkComponent.HpPercent;
+            }
+            RepairKitComponent repairKitComponent;
+            if ((repairKitComponent = (item as RepairKitComponent)) != null)
+            {
+                //requirementsPrice = requirementsPrice / (double)repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
+                requirementsPrice = pricePerPoint * (double)Math.Max(repairKitComponent.Resource, 1f);
+            }
+            // Moved it from the first spot in the order to the last one, since it's some sort of multiplier.
+            BuffComponent buffComponent;
+            BackendConfigSettingsClass.GClass1301.GClass1303 gclass;
+            if (item.TryGetItemComponent(out buffComponent) && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings != null && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings.TryGetValue(buffComponent.BuffType, out gclass))
+            {
+                requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * (double)gclass.PriceModifier;
+            }
+            requirementsPrice *= item.StackObjectsCount;
+            // !IMPORTANT Round the tax
+            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true))); 
+            // !IMPORTANT Floor the price
+            int amount = Convert.ToInt32(Math.Floor(requirementsPrice)); 
+            Debug.LogError($"TplId {item.TemplateId} Item Tax {tax}, StackObjectsCount {item.StackObjectsCount}");
+            return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
         }
         private static void ThrowIfNullResponse(string response, string message)
         {

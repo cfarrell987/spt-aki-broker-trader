@@ -678,7 +678,8 @@ class BrokerPriceManager
             const hasMoreThan85PercentPoints = pointsData.currentPoints >= originalMaxPtsBoundary && pointsData.currentMaxPoints >= originalMaxPtsBoundary;
             return !offer.sellInOnePiece && hasMoreThan85PercentPoints;
         });
-            // Some items might have no offers on flea (some event stuff, e.g. jack-o-lantern) so getOffersOfType will return "undefined"
+        //console.log(`[BROKER] ${itemTplId} COUNT OFFERS => ${JSON.stringify(this.ragfairOfferService.getOffersOfType(itemTplId)?.length)}`);
+        // Some items might have no offers on flea (some event stuff, e.g. jack-o-lantern) so getOffersOfType will return "undefined"
         const avgPrice = validOffersForItemTpl != undefined 
             ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
             //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.

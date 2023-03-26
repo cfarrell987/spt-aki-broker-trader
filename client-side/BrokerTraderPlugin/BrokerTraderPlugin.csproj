@@ -36,5 +36,11 @@
 		<Reference Include="Newtonsoft.Json.UnityConverters">
 			<HintPath>dependencies\Newtonsoft.Json.UnityConverters.dll</HintPath>
 		</Reference>
+		<Reference Include="Comfort">
+			<HintPath>dependencies\Comfort.dll</HintPath>
+		</Reference>
+		<Reference Include="ItemComponent.Types">
+			<HintPath>dependencies\ItemComponent.Types.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 </Project>

@@ -15,3 +15,4 @@ D:\SPT-AKI\Dev\My Mods\spt-aki-broker-trader\client-side\BrokerTraderPlugin\bin\
 D:\SPT-AKI\Dev\My Mods\spt-aki-broker-trader\client-side\BrokerTraderPlugin\obj\Debug\net472\BrokerTraderPlugin.csproj.CopyComplete
 D:\SPT-AKI\Dev\My Mods\spt-aki-broker-trader\client-side\BrokerTraderPlugin\bin\Debug\net472\Newtonsoft.Json.dll
 D:\SPT-AKI\Dev\My Mods\spt-aki-broker-trader\client-side\BrokerTraderPlugin\bin\Debug\net472\Newtonsoft.Json.UnityConverters.dll
+D:\SPT-AKI\Dev\My Mods\spt-aki-broker-trader\client-side\BrokerTraderPlugin\bin\Debug\net472\ItemComponent.Types.dll
