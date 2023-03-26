@@ -89,7 +89,7 @@ namespace PricePatch
                     //Logger.LogInfo(Json.Serialize(GetBestSellItemPrice(item)));
 
 
-                    __result = GetBestUserItemPrice(item);
+                    __result = GetBestTraderPrice(item).Price;
                     //TraderClass bestTrader = PriceManager.TradersList.First();
                     //SellItemPrice? bestPrice = PriceManager.GetUserItemPriceInRoubles(bestTrader, item);
                     //Logger.LogInfo($"First Trader Name {bestTrader.LocalizedName}");

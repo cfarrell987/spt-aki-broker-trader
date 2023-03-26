@@ -11,6 +11,7 @@ using UnityEngine;
 using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
+using static UnityEngine.UIElements.UIRAtlasManager;
 
 namespace BrokerTraderPlugin
 {
@@ -24,28 +25,33 @@ namespace BrokerTraderPlugin
         [JsonProperty("data")]
         public T Data { get; private set; }
     }
+    [Serializable]
+    internal struct RagfairPrice
+    {
+        [JsonProperty("avgPrice")]
+        public int AveragePrice { get; private set; }
+        [JsonProperty("pricePerPoint")]
+        public int PricePerPoint { get; private set; }
+    }
+
+    internal readonly struct TraderItemPriceData
+    {
+        public readonly TraderClass Trader { get; }
+        public readonly ItemPrice? Price { get; }
+        public readonly int AmountInRoubles { get; }
+        public TraderItemPriceData(TraderClass trader, ItemPrice? price, int amountInRoubles)
+        {
+            Trader = trader;
+            Price = price;
+            AmountInRoubles = amountInRoubles;
+        }
+    }
+
     internal static class PriceManager
     {
 
         public static readonly string[] SupportedTraderIds = new string[0];
-        [Serializable]
-        public struct RagfairPrice
-        {
-            [JsonProperty("avgPrice")]
-            public int AveragePrice { get; private set; }
-            [JsonProperty("pricePerPoint")]
-            public int PricePerPoint { get; private set; }
-        }
-        public struct TraderItemPrice
-        {
-            public TraderClass Trader;
-            public int RoubleAmount;
-            public TraderItemPrice(TraderClass Trader, int RoubleAmount)
-            {
-                this.Trader = Trader;
-                this.RoubleAmount = RoubleAmount;
-            }
-        }
+
         public static Dictionary<string, RagfairPrice> ItemRagfairPriceTable { get; set; } = new Dictionary<string, RagfairPrice>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
@@ -60,7 +66,7 @@ namespace BrokerTraderPlugin
             // Request ragfair item price table.
             response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
             ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
-            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, PriceManager.RagfairPrice>>(response);
+            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, RagfairPrice>>(response);
 
             // Request SupplyData from default SPT-AKI server route
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
@@ -72,8 +78,8 @@ namespace BrokerTraderPlugin
                 SupplyData.Add(traderId, body.Data);
             }
         }
-        // Gets the best paying trader and his rouble price.
-        public static TraderItemPrice GetBestTraderPrice(Item item)
+        // Gets the best paying trader and his price data.
+        public static TraderItemPriceData GetBestTraderPrice(Item item)
         {
             // Shouldn't happen, since tradersList will be assigned post MerchantsList.Show(),
             // before user opens any trader window.
@@ -86,55 +92,38 @@ namespace BrokerTraderPlugin
 
             // Look for highest paying trader, but get price in roubles,
             // trader appropriate conversion should be done separately, for precision.
-            TraderClass bestTrader = TradersList.First();
-            ItemPrice? bestPrice = GetUserItemPriceInRoubles(bestTrader, item);
-            foreach (TraderClass trader in TradersList)
+            TraderItemPriceData bestTraderPrice = GetTraderItemPriceData(TradersList.First(), item);
+            foreach (TraderClass trader in TradersList.Skip(1))
             {
-                ItemPrice? checkedPrice = GetUserItemPriceInRoubles(trader, item);
-                if (checkedPrice == null) continue;
-                if (checkedPrice.GetValueOrDefault().Amount > bestPrice.GetValueOrDefault().Amount)
+                TraderItemPriceData checkedPrice = GetTraderItemPriceData(trader, item);
+                if (checkedPrice.Price == null) continue;
+                if (checkedPrice.AmountInRoubles > bestTraderPrice.AmountInRoubles)
                 {
-                    bestTrader = trader;
-                    bestPrice = checkedPrice;
+                    bestTraderPrice = checkedPrice;
                 }
             }
-            int roubleAmount = bestPrice != null ? bestPrice.GetValueOrDefault().Amount : 0;
-            return new TraderItemPrice(bestTrader, roubleAmount);
+            return bestTraderPrice;
         }
-        // Gets the actual proper UserItemPrice but from the best paying trader.
-        public static ItemPrice? GetBestUserItemPrice(Item item)
-        {
-            TraderItemPrice bestTraderPrice = GetBestTraderPrice(item);
-            if (bestTraderPrice.RoubleAmount == 0) return null;
-            // Recalculating with GetUserItemPrice with convertion is important for accuracy, due to rounding!
-            return GetUserItemPrice(bestTraderPrice.Trader, item);
-        }
-        // Basically a copy of original GetUserItemPrice but with currency convertion
-        // made optional. Allows to compare the prices of different with good accuracy.
-        // Due to rounding after the conversion, the inaccuracy could be from 1 to ~500 roubles,
-        // if you did re-convertion into roubles post factum.
-        public static ItemPrice? GetUserItemPrice(TraderClass trader, Item item, bool convertToTraderCurrency = true)
+        // Basically a copy of original TraderClass.GetUserItemPrice but with a few changes, to collect useful data.
+        public static TraderItemPriceData GetTraderItemPriceData(TraderClass trader, Item item)
         {
             if (SupplyData[trader.Id] == null)
             {
                 Debug.LogError("supplyData is null");
-                return null;
+                return new TraderItemPriceData(trader, null, -1);
             }
-            if (!trader.Info.CanBuyItem(item)) return null;
+            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader, null, -1);
             string currencyId = CurrencyHelper.GetCurrencyId(trader.Settings.Currency);
             double amount = PriceHelper.CalculateBasePriceForAllItems(item, 0, SupplyData[trader.Id], trader.Settings.BuyerUp);
-            if(convertToTraderCurrency) amount /= SupplyData[trader.Id].CurrencyCourses[currencyId];
+            int amountInRoubles = Convert.ToInt32(Math.Floor(trader.Info.ApplyPriceModifier(amount))); // save rouble price
+
+            amount /= SupplyData[trader.Id].CurrencyCourses[currencyId];
             amount = trader.Info.ApplyPriceModifier(amount);
             if (amount.ApproxEquals(0.0))
             {
-                return null;
+                return new TraderItemPriceData(trader, null, -1);
             }
-            return new ItemPrice?(new ItemPrice(currencyId, Convert.ToInt32(Math.Floor(amount))));
-        }
-        // Just an alias to not get confused.
-        public static ItemPrice? GetUserItemPriceInRoubles(TraderClass trader, Item item)
-        {
-            return GetUserItemPrice(trader, item, false);
+            return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, Convert.ToInt32(Math.Floor(amount)))), amountInRoubles); ;
         }
         private static void ThrowIfNullResponse(string response, string message)
         {
