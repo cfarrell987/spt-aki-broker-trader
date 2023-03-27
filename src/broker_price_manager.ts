@@ -18,7 +18,7 @@ import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
 import modConfig from "../config/config.json";
-import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
+import { IGlobals, IItemEnhancementSettings, IPriceModifier } from "@spt-aki/models/eft/common/IGlobals";
 
 import * as fs from "fs";
 import * as path from "path";
@@ -30,27 +30,13 @@ import { RagfairController } from "@spt-aki/controllers/RagfairController";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { ISearchRequestData, OfferOwnerType } from "@spt-aki/models/eft/ragfair/ISearchRequestData";
 import { RagfairSort } from "@spt-aki/models/enums/RagfairSort";
+import { ItemComponentHelper, ItemComponentTypes, ItemPointsData } from "./item_component_helper";
 
 interface BrokerPriceManagerCache
 {
     tradersMetaData: TradersMetaData;
     itemTraderTable: Record<string, TraderBaseData>;
-    itemRagfairPriceTable: Record<string, ItemRagfairPrice>;
-}
-
-enum ClassesWithPoints 
-    {
-    ARMORED_EQUIPMENT = "57bef4c42459772e8d35a53b",
-    MEDS = "543be5664bdc2dd4348b4569",
-    FOOD_DRINK = "543be6674bdc2df1348b4569",
-    WEAPON = "5422acb9af1c889c16000029",
-    // fuel cans, water/air fiters in spt-aki, at least as of 3.5.3
-    // inside the flea offer don't seem to contain the "item.upd.Resource" property
-    // so it resource points seem unaccounted for. And also all offers with them are 100% condition.
-    // But when calculating trader sell prices it needs to be accounted for.
-    BARTER_ITEM = "5448eb774bdc2d0a728b4567",
-    KEY = "54009119af1c881c07000029",
-    REPAIR_KITS = "616eb7aea207f41933308f46"
+    itemRagfairPriceTable: Record<string, number>;
 }
 
 class BrokerPriceManager 
@@ -73,6 +59,7 @@ class BrokerPriceManager
     private ragfairOfferHelper: RagfairOfferHelper;
 
     public static brokerTraderId = baseJson._id;
+    private componentHelper: ItemComponentHelper;
     
     private dbServer: DatabaseServer;
     private dbGlobals: IGlobals;
@@ -82,11 +69,13 @@ class BrokerPriceManager
 
     private _tradersMetaData: TradersMetaData;
     private _itemTraderTable: Record<string, TraderBaseData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
-    private _itemRagfairPriceTable: Record<string, ItemRagfairPrice>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
+    private _itemRagfairPriceTable: Record<string, number>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
     private constructor(container?: DependencyContainer)
     {
         this._container = container ?? tsyringeContainer;
+
+        this.componentHelper = new ItemComponentHelper(this._container);
 
         this.itemHelper = container.resolve<ItemHelper>("ItemHelper");
         this.presetHelper = container.resolve<PresetHelper>("PresetHelper")
@@ -144,7 +133,7 @@ class BrokerPriceManager
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Trader Table...`);
         this._itemTraderTable = this.getItemTraderTable();
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
-        this._itemRagfairPriceTable = this.getFreshItemRagfairPriceTable();
+        this._itemRagfairPriceTable = this.getItemRagfairPriceTable();
         console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables generation completed.`);
     }
 
@@ -222,7 +211,7 @@ class BrokerPriceManager
         return this._itemTraderTable;
     }
 
-    public get itemRagfairPriceTable(): Record<string, ItemRagfairPrice>
+    public get itemRagfairPriceTable(): Record<string, number>
     {
         return this._itemRagfairPriceTable;
     }
@@ -237,12 +226,12 @@ class BrokerPriceManager
         }, {});
     }
 
-    public getFreshItemRagfairPriceTable(): Record<string, ItemRagfairPrice>
+    public getItemRagfairPriceTable(): Record<string, number>
     {
-        const validRagfairItemTpls = Object.values(this.dbItems).filter(itemTpl => this.ragfairServerHelper.isItemValidRagfairItem([true, itemTpl]));
-        return validRagfairItemTpls.reduce((accum, itemTpl) => 
+        const validRagfairItemTplIds = Object.values(this.dbItems).filter(itemTpl => this.ragfairServerHelper.isItemValidRagfairItem([true, itemTpl])).map(itemTpl => itemTpl._id);
+        return validRagfairItemTplIds.reduce((accum, itemTplId) => 
         {
-            accum[itemTpl._id] = this.getFreshItemTplRagfairPrice(itemTpl._id);
+            accum[itemTplId] = this.getItemTemplateRagfairPrice(itemTplId);
             return accum;
         }, {});
     }
@@ -253,12 +242,14 @@ class BrokerPriceManager
         for (const traderName in this.supportedTraders)
         {
             const traderId = this.supportedTraders[traderName];
+            const currency = this.dbTraders[traderId].base.currency;
             const traderCoef = this.dbTraders[traderId].base.loyaltyLevels[0].buy_price_coef;
             const itemsBuy = this.dbTraders[traderId].base.items_buy;
             const itemsBuyProhibited = this.dbTraders[traderId].base.items_buy_prohibited;
             data[traderId] = {
                 id: traderId,
                 name: traderName,
+                currency: currency,
                 itemsBuy: itemsBuy,
                 itemsBuyProhibited: itemsBuyProhibited,
                 buyPriceCoef: traderCoef
@@ -269,6 +260,7 @@ class BrokerPriceManager
         data[baseJson._id] = {
             id: baseJson._id,
             name: baseJson.nickname.toUpperCase(),
+            currency: "RUB",
             itemsBuy: {category: [], id_list: []},
             itemsBuyProhibited: {category: [], id_list: []},
             buyPriceCoef: Infinity // to make sure it's never selected as the most profitable trader
@@ -296,21 +288,21 @@ class BrokerPriceManager
         return sellableTraders.find(trader => trader.buyPriceCoef === lowestCoef);
     }
 
+    // Remove later
     public getBestTraderForItem(item: Item): TraderBaseData
     {
-        const pointsData = this.getItemPointsData(item);
-        // Preserve game balance, by checking if item is Repairable and should be sold to Fence.
+        // Preserve game balance, by checking if item should be sold to Fence.
         // Even if for some reason Fence doesn't buy this item category(probably shouldn't even be possible)
         // it will be force sold to him anyway
-        return pointsData.currentMaxPoints < pointsData.OriginalMaxPoints * 0.6 && this.isOfRepairableBaseClass(item._tpl)
+        return !this.passesBuyoutRestrictions(item, false)
             ? this._tradersMetaData[Traders.FENCE]
             : this.getBestTraderForItemTpl(item._tpl);
     }
 
-    public getBestSellDesicionForItem(pmcData: IPmcData, item: Item): SellDecision
+    public getBestSellDecisionForItem(pmcData: IPmcData, item: Item): SellDecision
     {
         const bestTrader = this.getBestTraderForItem(item);
-        const traderPrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
+        const traderPrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
         // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
         // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in SPT-AKI
         // some random, even default weapon attachments have unreasonable price on flea.
@@ -365,7 +357,7 @@ class BrokerPriceManager
         //Durability of items or number of uses affects the base price, so in order to get the base price of full items, don't compare with damaged/used ones.
         // const basePrice = this.handbookHelper.getTemplatePrice(item._tpl);
         const bestTrader = this.getBestTraderForItem(item);
-        const basePrice = this.getItemTraderPrice(item, bestTrader.id, pmcData);
+        const basePrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
 
         const Q = sellInOnePiece ? offerItemCount : 1;
         const VO = basePrice * offerItemCount / Q;
@@ -400,128 +392,6 @@ class BrokerPriceManager
 
         // Might use trunc later to truncate the floating point.
         return Math.round(pureTax * intelTaxReduction);
-    }
-
-    public getItemPointsData(item: Item): ItemPointsData
-    {
-        // Check if item is descendant of any class that have points(durability/resource)
-        const itemBaseClassWithPointsId = Object.values(ClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(item._tpl, baseClassId));
-        let currentPoints = 1;
-        let currentMaxPoints = 1;
-        const originalMaxPoints = this.getOriginalMaxPointsByItemTplId(item._tpl);
-        switch (itemBaseClassWithPointsId)
-        {
-            case ClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
-            case ClassesWithPoints.WEAPON:
-                // since not all descendants of baseclass might have durability/resource points
-                // and also some items (e.g. just bought from flea) might have no "upd" property
-                // so consider them brand new with full points.
-                if (item.upd?.Repairable == undefined) 
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else 
-                {
-                    currentPoints = item.upd.Repairable.Durability;
-                    currentMaxPoints = item.upd.Repairable.MaxDurability;
-                } 
-                break;
-            case ClassesWithPoints.FOOD_DRINK:
-                if (item.upd?.FoodDrink == undefined) 
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else
-                    currentPoints = item.upd.FoodDrink.HpPercent; // not an actual percent, it's literally current resource value
-                break;
-            case ClassesWithPoints.MEDS:
-                if (item.upd?.MedKit == undefined) 
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else
-                    currentPoints = item.upd.MedKit.HpResource;
-                break;
-            case ClassesWithPoints.BARTER_ITEM:
-                if (item.upd?.Resource == undefined) 
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else
-                    currentPoints = item.upd.Resource.Value;
-                break;
-            case ClassesWithPoints.KEY:
-                if (item.upd?.Key == undefined)
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else
-                    currentPoints = originalMaxPoints - item.upd.Key.NumberOfUsages; // It's wacky, but for some reason NumberOfUsages = Actual Times Used
-                break;
-            case ClassesWithPoints.REPAIR_KITS:
-                if (item.upd?.RepairKit == undefined)
-                    currentPoints = currentMaxPoints = originalMaxPoints;
-                else
-                    currentPoints = item.upd.RepairKit.Resource;
-                break;
-        }
-        if (item.upd?.Repairable == undefined) currentMaxPoints = originalMaxPoints; // if can't be repaired, current max point capacity doesn't change (food/meds/etc.)
-        return {
-            // Check if values are not falsey, since by default 
-            // some items with no resource points can assign a 0 
-            // and it will make the price in latter calculations become null
-            currentPoints: currentPoints || 1,
-            currentMaxPoints: currentMaxPoints || 1,
-            OriginalMaxPoints: originalMaxPoints || 1
-        };
-    }
-
-    /**
-     * Get the Original Max Points value (MaxDurbility/MaxResource etc.) from the database. 
-     * 
-     * Return value is checked for falsey value and if so - returns 1 to preserve calculations.
-     * E.g.: If item wasn't found, or if found value is 0, or item has no points property at all.
-     * @param itemTplId Item Template Id
-     * @returns Original Max Points value, from item template in the database
-     */
-    public getOriginalMaxPointsByItemTplId(itemTplId: string): number
-    {
-        // Check if item is descendant of any class that have points(durability/resource)
-        const itemBaseClassWithPointsId = Object.values(ClassesWithPoints).find(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
-        const itemTpl = this.dbItems[itemTplId];
-        if (itemTpl == undefined)
-        {
-            console.log("[BrokerPriceManager] Couldn't find item in database (getOriginalMaxPointsByItemTplId). Defaulting to 1");
-            return 1;
-        }
-        switch (itemBaseClassWithPointsId)
-        {
-            case ClassesWithPoints.ARMORED_EQUIPMENT: // Armored_Equipment and Weapon use the same properties for durability
-            case ClassesWithPoints.WEAPON:
-                return itemTpl._props.MaxDurability || 1;
-            case ClassesWithPoints.FOOD_DRINK:
-                return itemTpl._props.MaxResource || 1;
-            case ClassesWithPoints.MEDS:
-                return itemTpl._props.MaxHpResource || 1;
-            case ClassesWithPoints.BARTER_ITEM:
-                return itemTpl._props.MaxResource || 1;
-            case ClassesWithPoints.KEY:
-                return itemTpl._props.MaximumNumberOfUsage || 1;
-            case ClassesWithPoints.REPAIR_KITS:
-                return itemTpl._props.MaxRepairResource || 1;
-            default:
-                return 1;
-        }
-    }
-
-    /**
-     * @deprecated Not implemented.
-     * @param itemId 
-     * @returns 
-     */
-    private getItemPointsDataById(itemId: string): ItemPointsData
-    {
-        return undefined;
-    }
-
-    /**
-     * @deprecated Not implemented.
-     * @param itemId 
-     * @returns 
-     */
-    private getOriginalMaxPointsByTplId(itemTplId: string): number
-    {
-        return undefined;
     }
 
     /**
@@ -567,14 +437,14 @@ class BrokerPriceManager
         return sellDataItems.reduce((accum, currItem) => 
         {
             const inventoryItem = this.getItemFromInventoryById(currItem.id, pmcData);
-            const sellDesicion = this.getBestSellDesicionForItem(pmcData, inventoryItem);
-            const groupByTraderId = sellDesicion.traderId;
-            const itemTax = (sellDesicion.tax ?? 0);
+            const sellDecision = this.getBestSellDecisionForItem(pmcData, inventoryItem);
+            const groupByTraderId = sellDecision.traderId;
+            const itemTax = (sellDecision.tax ?? 0);
             // console.log(`[SELL DECISION] ${JSON.stringify(sellDesicion)}`);
             // console.log(`[ITEM TAX] ${itemTax}`);
-            const itemPrice = sellDesicion.price; 
-            const sellProfit = itemPrice - itemTax;
-            const requestPrice = this.convertRoublesToTraderCurrency(sellProfit, groupByTraderId); // important. convert to target trader currency.
+            const itemPrice = sellDecision.price; 
+            const sellProfit = Math.floor(itemPrice - itemTax);
+            const requestPrice = Math.floor(this.convertRoublesToTraderCurrency(itemPrice - itemTax, groupByTraderId)); // important. convert to target trader currency and floor it.
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
@@ -630,54 +500,153 @@ class BrokerPriceManager
         return Math.round(basePrice * buyPriceMult);
     }
 
-    /**
-     * Calculates the sell price of an inventory item for a specific trader.
-     * For an inventory item durability/resource points are accounted for.
-     * @param itemTplId Item Template Id.
-     * @param traderId Trader Id.
-     * @returns number - price of selling the item to trader.
-     */
-    public getSingleItemTraderPrice(item: Item, traderId: string): number
+    // Reference - "TraderClass.GetUserItemPrice"
+    public getItemTraderPrice(pmcData: IPmcData, item: Item, traderId: string): number
     {
-        // BEAR DOGTAG - "59f32bb586f774757e1e8442"
-        // USEC DOGTAG - "59f32c3b86f77472a31742f0"
-        const tplPrice = this.getItemTplTraderPrice(item._tpl, traderId);
-        if (item._tpl === "59f32bb586f774757e1e8442" || item._tpl === "59f32c3b86f77472a31742f0")
-        {
-            // Shouldn't need rounding
-            return tplPrice * this.getDogtagLevel(item);
-        }
-        const pointsData = this.getItemPointsData(item);
-        // console.log(`[tplPrice] ${JSON.stringify(tplPrice)}`);
-        // console.log(`[pointsData] ${JSON.stringify(pointsData)}`);
-        if (this.isOfRepairableBaseClass(item._tpl))
-            // for repairable items approximate based on current Max Durability
-            // although it won't account for current durability, game balance impact should be negligible.
-            return Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentMaxPoints) * this.getItemStackObjectsCount(item)
-        else
-            // for others(food/drink/meds) calculate based on currentPoints - seeems 100% accurate.
-            // if item doesn't have points (stims/barter items) maxPoints and currentPoints will = 1
-            return Math.round(tplPrice / pointsData.OriginalMaxPoints * pointsData.currentPoints) * this.getItemStackObjectsCount(item); 
+        if (!this.canBeBoughtByTrader(item._tpl, traderId)) return 0;
+        const traderMeta = this._tradersMetaData[traderId];
+        if (traderMeta == undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
+
+        let price = this.getBuyoutPriceForAllItems(pmcData, item, traderId === Traders.FENCE);
+        price = price * (1 - traderMeta.buyPriceCoef/100); // apply trader price modifier
+        return price;
     }
 
-    public getItemTraderPrice(item: Item, traderId: string, pmcData: IPmcData): number
+    // Refernce - "GClass1969.CalculateBasePriceForAllItems"
+    public getBuyoutPriceForAllItems(pmcData: IPmcData, item: Item, isFence: boolean, basePriceSrc?: Record<string, number>): number
     {
+        let price = 0;
+        
+        // Here should be check if item is a container with items
+        // but no need for it, since it's checked clientside.
+
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
-        // console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
-        return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemTraderPrice(curr, traderId), 0);
+        for (const itemIter of itemAndChildren)
+        {
+            const priceIter = this.getBuyoutPriceForSingleItem(itemIter, isFence, basePriceSrc);
+            if (priceIter === 0) return 0;
+            price += priceIter;
+        }
+        return price;
     }
+
+    // Reference - "GClass1969.CalculateBuyoutBasePriceForSingleItem()" and "GClass1969.smethod_0()"
+    public getBuyoutPriceForSingleItem(item: Item, isFence: boolean, basePriceSrc?: Record<string, number>): number
+    {
+        if (!this.passesBuyoutRestrictions(item, isFence)) return 0;
+
+        let price: number;
+
+        if (basePriceSrc != null) price = basePriceSrc[item._tpl];
+        else price = this.handbookHelper.getTemplatePrice(item._tpl);
+
+        if (price == null) throw ("BrokerPriceManager | getBuyoutPriceForSingleItem \"price\" is undefined, something is wrong with handbook or basePriceSrc param!");
+
+        let component: ItemPointsData;
+        const props = this.dbItems[item._tpl]?._props;
+        if (props == null) throw ("BrokerPriceManager | getBuyoutPriceForSingleItem \"props\" is undefined, couldn't find item template in database!");
+
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.REPAIRABLE))
+        {
+            // "Points" are Durability
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.REPAIRABLE);
+            const num2 = 0.01 * Math.pow(0, component.maxPoints);
+            const num3 = Math.ceil(component.maxPoints);
+            const num4 = props.RepairCost * (num3 - Math.ceil(component.points));
+            price = price * (num3 / component.templateMaxPoints + num2) - num4;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.BUFF))
+        {
+            // "Points" is Buff.value
+            const buffType = item.upd.Buff.buffType;
+            const priceModifier = (this.dbGlobals.config.RepairSettings.ItemEnhancementSettings[buffType] as IPriceModifier).PriceModifier;
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.BUFF);
+            price *= 1 + Math.abs(component.points - 1) * priceModifier;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.DOGTAG))
+        {
+            // "Points" is Dogtag.Level
+            price *= this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.DOGTAG).points;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.KEY))
+        {
+            // "Points" is NumberOfUsages
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.KEY);
+            price = price / component.templateMaxPoints * (component.templateMaxPoints - component.points);
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.RESOURCE))
+        {
+            // "Points" is Value, "MaxPoints" is MaxResource
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.RESOURCE);
+            price = price * 0.1 + price * 0.9 / component.maxPoints * component.points;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.SIDE_EFFECT))
+        {
+            // "Points" is Value, "MaxPoints" is MaxResource
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.SIDE_EFFECT);
+            price = price * 0.1 + price * 0.9 / component.maxPoints * component.points;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.MEDKIT))
+        {
+            // "Points" is HpResource, "MaxPoints" is MaxResource
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.MEDKIT);
+            price = price / component.maxPoints * component.points;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.FOOD_DRINK))
+        {
+            // "Points" is HpPercent, "MaxPoints" is MaxResource
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.FOOD_DRINK);
+            price = price / component.maxPoints * component.points;
+        }
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.REPAIRKIT))
+        {
+            // "Points" is Resource, "MaxPoints" is MaxRepairResource
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.REPAIRKIT);
+            price = price / component.maxPoints * Math.max(component.points, 1);
+        }
+        return price * this.getItemStackObjectsCount(item);
+    }
+
+
+    // Reference - GClass1969.CalculateBuyoutBasePriceForSingleItem() (the restriction checking part)
+    public passesBuyoutRestrictions(item: Item, isFence: boolean): boolean
+    {
+        let component: ItemPointsData;
+        const buyoutRestrictions = this.dbGlobals.config.TradingSettings.BuyoutRestrictions;
+        if (!isFence && this.componentHelper.hasComponent(item, ItemComponentTypes.MEDKIT))
+        {
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.MEDKIT);
+            return !(component.points/component.maxPoints < buyoutRestrictions.MinMedsResource);
+        }
+        if (!isFence && this.componentHelper.hasComponent(item, ItemComponentTypes.FOOD_DRINK))
+        {
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.FOOD_DRINK);
+            return !(component.points < buyoutRestrictions.MinFoodDrinkResource);
+        }
+        if (!isFence && this.componentHelper.hasComponent(item, ItemComponentTypes.REPAIRABLE))
+        {
+            component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.REPAIRABLE);
+            return !(component.maxPoints < component.templateMaxPoints * buyoutRestrictions.MinDurability || component.points < component.maxPoints * buyoutRestrictions.MinDurability);
+        }
+        return true;
+    }
+
+
+    // public getItemTraderPrice(item: Item, traderId: string, pmcData: IPmcData): number
+    // {
+    //     const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+    //     // console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
+    //     return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemTraderPrice(curr, traderId), 0);
+    // }
 
     /**
      * Gets ragfair avg and perPoint price for template, accesses the cached price table.
      * @param itemTplId Item Template Id.
      * @returns ItemRagFairCosts - flea tax and average flea price.
      */
-    public getItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
+    public getItemTplRagfairPrice(itemTplId: string): number
     {
-        return this._itemRagfairPriceTable[itemTplId] ?? {
-            avgPrice: 0,
-            pricePerPoint: 0
-        };
+        return this._itemRagfairPriceTable[itemTplId] ?? 0;
     }
 
     /**
@@ -690,9 +659,9 @@ class BrokerPriceManager
      * item offers and the received price would be based off Static or Dynamic price, which is
      * less accurate that an actual average price based on existing offers.
      * @param itemTplId Item Template Id.
-     * @returns ItemRagfairPrice with avg and perPoint price.
+     * @returns number Average flea price
      */
-    private getFreshItemTplRagfairPrice(itemTplId: string): ItemRagfairPrice
+    private getItemTemplateRagfairPrice(itemTplId: string): number
     {
         // Collect offers with at least 85% durability/resource (if item has no points properties - its valid) and no sellInOnePiece
 
@@ -712,9 +681,9 @@ class BrokerPriceManager
                 offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
                 this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 // no "not operational" offers 
             ) return false;    
-            const pointsData = this.getItemPointsData(firstItem);
-            const originalMaxPtsBoundary = pointsData.OriginalMaxPoints * 0.85; // 85% of max capacity
-            const hasMoreThan85PercentPoints = pointsData.currentPoints >= originalMaxPtsBoundary && pointsData.currentMaxPoints >= originalMaxPtsBoundary;
+            const pointsData = this.componentHelper.getRagfairItemComponentPoints(firstItem);
+            const originalMaxPtsBoundary = pointsData.templateMaxPoints * 0.85; // 85% of max capacity
+            const hasMoreThan85PercentPoints = pointsData.points >= originalMaxPtsBoundary && pointsData.maxPoints >= originalMaxPtsBoundary;
             return hasMoreThan85PercentPoints; 
         });
         //console.log(`[BROKER] ${itemTplId} COUNT OFFERS => ${JSON.stringify(this.ragfairOfferService.getOffersOfType(itemTplId)?.length)}`);
@@ -740,20 +709,21 @@ class BrokerPriceManager
         //     console.log(`[avg price] ${Math.round(avgPrice)}`)
         //     console.log(`[per point] ${Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))}`)
         // }
-        return {
-            avgPrice: Math.round(avgPrice),
-            pricePerPoint: Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))
-        };
+        return avgPrice;
+        // return {
+        //     avgPrice: Math.round(avgPrice),
+        //     pricePerPoint: Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))
+        // };
     }
 
     public getSingleItemRagfairPrice(item: Item): number
     {
-        const pointsData = this.getItemPointsData(item);
+        const pointsData = this.componentHelper.getRagfairItemComponentPoints(item);
         // Round, since weapon or armor durability can be float, etc.
         // console.log(`[POINTS DATA] ${JSON.stringify(pointsData)}`);
         // console.log(`[RAGFAIR PRICE DATA] ${JSON.stringify(this.getItemTplRagfairPrice(item._tpl))}`);
         // console.log(`[GET STACK OBJECT COUNT DATA] ${JSON.stringify(this.getItemStackObjectsCount(item))}`);
-        return Math.round(pointsData.currentPoints * this.getItemTplRagfairPrice(item._tpl).pricePerPoint) * this.getItemStackObjectsCount(item);
+        return Math.floor(pointsData.points * this.getItemTplRagfairPrice(item._tpl) / pointsData.templateMaxPoints) * this.getItemStackObjectsCount(item);
     }
 
     public getItemRagfairPrice(item: Item, pmcData: IPmcData): number
@@ -766,11 +736,6 @@ class BrokerPriceManager
     public getItemFromInventoryById(itemId: string, pmcData: IPmcData): Item
     {
         return pmcData.Inventory.items.find(item => item._id === itemId);
-    }
-
-    public isOfRepairableBaseClass(itemTplId: string): boolean
-    {
-        return [ClassesWithPoints.ARMORED_EQUIPMENT, ClassesWithPoints.WEAPON].some(baseClassId => this.itemHelper.isOfBaseclass(itemTplId, baseClassId));
     }
 
     public getItemStackObjectsCount(item: Item): number
@@ -811,10 +776,15 @@ class BrokerPriceManager
     {
         const trader = this.dbTraders[traderId];
         if (trader == undefined) console.log(`[${modInfo.name} ${modInfo.version}] Error converting to trader currency. Couldn't find trader! Defaulting to RUB.`);
+
         const tCurrencyTag = trader?.base?.currency ?? "RUB";
         const currencyTpl = this.paymentHelper.getCurrency(tCurrencyTag);
-        // console.log(`[TEST CONVERION] ${currencyTpl} ${this.handbookHelper.fromRUB(roubleAmount, currencyTpl)}`);
-        return this.handbookHelper.fromRUB(roubleAmount, currencyTpl);
+
+        if (currencyTpl === Money.ROUBLES) return roubleAmount;
+
+        const targetCurrPrice = this.handbookHelper.getTemplatePrice(currencyTpl);
+        return targetCurrPrice ? roubleAmount / targetCurrPrice : 0;
+        // return this.handbookHelper.fromRUB(roubleAmount, currencyTpl); doesn't do well, because it Rounds the return value, when it has to be Floored.
     }
 
     // public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number{
@@ -833,6 +803,7 @@ interface TraderBaseData
 {
     id: string;
     name: string;
+    currency: string;
     itemsBuy: IItemBuyData;
     itemsBuyProhibited: IItemBuyData;
     buyPriceCoef: number;
@@ -841,25 +812,6 @@ interface TraderBaseData
 interface TradersMetaData 
 {
     [traderId: string]: TraderBaseData
-}
-
-/**
- * Avg and per point prices 
- */
-interface ItemRagfairPrice
-{
-    avgPrice: number;
-    pricePerPoint: number;
-}
-
-/**
- * Item data with durability/resource points
- */
-interface ItemPointsData
-{
-    currentPoints: number;
-    currentMaxPoints: number;
-    OriginalMaxPoints: number;
 }
 
 /**

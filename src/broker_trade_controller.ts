@@ -101,15 +101,13 @@ export class BrokerTradeController extends TradeController
                             );
                         else 
                         {
+                            const tCurrency = BrokerPriceManager.instance.tradersMetaData[traderId].currency;
                             const rubPrice = tReqData.totalProfit;
-                            const usdPrice = handbookHelper.fromRUB(rubPrice, "5696686a4bdc2da3298b456a");
-                            const eurPrice = handbookHelper.fromRUB(rubPrice, "569668774bdc2da2298b4568");
-                            verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. `+
-                                `Profit ${BrokerPriceManager.getNumberWithSpaces(rubPrice)} RUB (`+
-                                `In USD: ${BrokerPriceManager.getNumberWithSpaces(usdPrice)} | `+
-                                `In EUR: ${BrokerPriceManager.getNumberWithSpaces(eurPrice)})`
-                            );
+                            let profitMsg = 
+                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. Profit ${BrokerPriceManager.getNumberWithSpaces(rubPrice)} RUB`;
+                            if (tCurrency !== "RUB")
+                                profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(Math.floor(priceManager.convertRoublesToTraderCurrency(rubPrice, traderId)))})`;
+                            verboseLogger.explicitSuccess(profitMsg);
                         }
     
                         // Items sold to Broker are sold with Flea Prices, here simulate other flea market things

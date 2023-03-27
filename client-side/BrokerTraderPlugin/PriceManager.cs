@@ -27,14 +27,6 @@ namespace BrokerTraderPlugin
         [JsonProperty("data")]
         public T Data { get; private set; }
     }
-    [Serializable]
-    internal struct RagfairPrice
-    {
-        [JsonProperty("avgPrice")]
-        public int AveragePrice { get; private set; }
-        [JsonProperty("pricePerPoint")]
-        public int PricePerPoint { get; private set; }
-    }
 
     internal readonly struct TraderItemPriceData
     {
@@ -65,7 +57,7 @@ namespace BrokerTraderPlugin
     internal static class PriceManager
     {
         public static readonly string[] SupportedTraderIds = new string[0];
-        public static Dictionary<string, RagfairPrice> ItemRagfairPriceTable { get; set; } = new Dictionary<string, RagfairPrice>();
+        public static Dictionary<string, int> ItemRagfairPriceTable { get; set; } = new Dictionary<string, int>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
         // Requests in a static constructor will be performed only once for initialization.
@@ -79,7 +71,7 @@ namespace BrokerTraderPlugin
             // Request ragfair item price table.
             response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
             ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
-            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, RagfairPrice>>(response);
+            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, int>>(response);
 
             // Request SupplyData from default SPT-AKI server route
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
@@ -142,11 +134,9 @@ namespace BrokerTraderPlugin
         {
             if (!item.CanSellOnRagfairRaidRelated || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return new RagfairItemPriceData(-1, -1, null);
 
-            double pricePerPoint = ItemRagfairPriceTable[item.TemplateId].PricePerPoint;
             // Basically base price(avg flea price)
-            // Will be overwritten anyway.
-            // Will be used in the future if flea offer prices will follow the same price logic as trader prices.
-            double requirementsPrice = ItemRagfairPriceTable[item.TemplateId].AveragePrice;
+            // Will be overwritten.
+            double requirementsPrice = ItemRagfairPriceTable[item.TemplateId];
 
             RepairableComponent repairableComponent;
             if (item.TryGetItemComponent(out repairableComponent))
@@ -160,7 +150,7 @@ namespace BrokerTraderPlugin
 
                 // - As of SPT-AKI 3.5.3 Repairable items only seems to change based on current Durability, not anything else.
                 //
-                requirementsPrice = pricePerPoint * repairableComponent.Durability;
+                requirementsPrice = requirementsPrice / repairableComponent.TemplateDurability * repairableComponent.Durability;
                 // Same goes for every other item.
             }
 
@@ -172,42 +162,37 @@ namespace BrokerTraderPlugin
             KeyComponent keyComponent;
             if (item.TryGetItemComponent<KeyComponent>(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
             {
-                //requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
                 // IMPORTANT
                 // keyComponent.NumberOfUsages <- actually means TIMES USED, so to get NumberOfUsages "left" subtract this from MaximumNumberOfUsage
                 //
                 // bruh
-                requirementsPrice = pricePerPoint * (keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
+                requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
+                
             }
             ResourceComponent resourceComponent;
             if (item.TryGetItemComponent<ResourceComponent>(out resourceComponent) && resourceComponent.MaxResource > 0f)
             {
-                //requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)resourceComponent.MaxResource * (double)resourceComponent.Value;
-                requirementsPrice = pricePerPoint * resourceComponent.Value;
+                requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)resourceComponent.MaxResource * (double)resourceComponent.Value;
             }
             SideEffectComponent sideEffectComponent;
             if (item.TryGetItemComponent<SideEffectComponent>(out sideEffectComponent) && sideEffectComponent.MaxResource > 0f)
             {
-                //requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)sideEffectComponent.MaxResource * (double)sideEffectComponent.Value;
-                requirementsPrice = pricePerPoint * sideEffectComponent.Value;
+                requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)sideEffectComponent.MaxResource * (double)sideEffectComponent.Value;
             }
             MedKitComponent medKitComponent;
             if (item.TryGetItemComponent<MedKitComponent>(out medKitComponent))
             {
-                //requirementsPrice = requirementsPrice / (double)medKitComponent.MaxHpResource * (double)medKitComponent.HpResource;
-                requirementsPrice = pricePerPoint * medKitComponent.HpResource;
+                requirementsPrice = requirementsPrice / (double)medKitComponent.MaxHpResource * (double)medKitComponent.HpResource;
             }
             FoodDrinkComponent foodDrinkComponent;
             if (item.TryGetItemComponent<FoodDrinkComponent>(out foodDrinkComponent))
             {
-                //requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * (double)foodDrinkComponent.HpPercent;
-                requirementsPrice = pricePerPoint * foodDrinkComponent.HpPercent;
+                requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * (double)foodDrinkComponent.HpPercent;
             }
             RepairKitComponent repairKitComponent;
             if ((repairKitComponent = (item as RepairKitComponent)) != null)
             {
-                //requirementsPrice = requirementsPrice / (double)repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
-                requirementsPrice = pricePerPoint * (double)Math.Max(repairKitComponent.Resource, 1f);
+                requirementsPrice = requirementsPrice / (double)repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
             }
             // Moved it from the first spot in the order to the last one, since it's some sort of multiplier.
             BuffComponent buffComponent;
