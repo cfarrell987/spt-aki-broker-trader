@@ -1,8 +1,5 @@
-dist
 dist/
-node_modules
 node_modules/
-client-side/BrokerTraderPlugin/.vs
 client-side/BrokerTraderPlugin/.vs/
-client-side/BrokerTraderPlugin/bin
 client-side/BrokerTraderPlugin/bin/
+client-side/BrokerTraderPlugin/obj/
