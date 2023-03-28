@@ -385,47 +385,67 @@ class BrokerPriceManager
         // Q is the "quantity" factor which is either 1 when "Require for all items in offer" is checked or the amount of items being offered otherwise.
         // Ti and Tr are tax constants; currently set to Ti = 0.03 and Tr = 0.03
 
-        //The base price of any item can be calculated by dividing the trader buyback price with the multiplier of that trader. 
-        //Traders have a different multiplier,
-        //Therapist=0.63, Ragman=0.62, Jaeger=0.6, Mechanic=0.56, Prapor=0.5, Skier=0.49, Peacekeeper=0.45, Fence=0.4.
-        //Durability of items or number of uses affects the base price, so in order to get the base price of full items, don't compare with damaged/used ones.
-        // const basePrice = this.handbookHelper.getTemplatePrice(item._tpl);
-        const bestTrader = this.getBestTraderForItem(pmcData, item);
-        const basePrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
+        if (requirementsValue < 1 || offerItemCount < 1) return 0;
 
+        // Wiki info is mostly okay, but decompiled code says that the base price is buyout price, not trader price.
+        const basePrice = this.getBuyoutPriceForAllItems(pmcData, item, true); // isFence explicitly true, to skip "passesRestrictions"
+
+        
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         const Q = sellInOnePiece ? offerItemCount : 1;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         const VO = basePrice * offerItemCount / Q;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         const VR = requirementsValue;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         let PO = Math.log10(VO/VR);
         if (VR < VO) PO = Math.pow(PO, 1.08);
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         let PR = Math.log10(VR/VO);
         if (VR >= VO) PR = Math.pow(PR, 1.08);
-        const Ti = 0.03;
-        const Tr = 0.03;
 
-        const pureTax = VO * Ti * Math.pow(4, PO) * Q + VR * Tr * Math.pow(4, PR) * Q;
+        const ragfairConfig = this.dbGlobals.config.RagFair;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        const Ti = ragfairConfig.communityItemTax / 100; // 0.03;
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        const Tr = ragfairConfig.communityRequirementTax / 100; // 0.03;
+
+        let tax = VO * Ti * Math.pow(4, PO) * Q + VR * Tr * Math.pow(4, PR) * Q;
 
         // Accounts for only one flea tax reduction bonus, since no other hideout are provides such bonuses.
         const intelBonus = pmcData.Bonuses.find(bonus => bonus.type === "RagfairCommission");
         // It might be undefined when you have no intel center built at all.
         // if (hideoutManagement == undefined) console.log("[Broker Trader] COULDN'T FIND INTELLIGENCE CENTER , DEFAULTING TO NO TAX REDUCTION");
-        const intelBonusVal = intelBonus?.value ?? 0; // expect that bonus.value will be NEGATIVE
+        const intelBonusVal = Math.abs(intelBonus?.value ?? 0); // expect that bonus.value will be NEGATIVE
         const hideoutManagement = pmcData.Skills.Common.find(skill => skill.Id === "HideoutManagement");
         if (hideoutManagement == undefined) console.log("[Broker Trader] COULDN'T FIND HIDEOUT MANAGEMENT SKILL, DEFAULTING TO SKILL LEVEL 1");
         const hmProgress = hideoutManagement?.Progress ?? 1; // total skill xp
-        // Wiki states that hideout management hives 0.3% per level. But config says 1%. Ingame says 1%. Select config value.
+        // Wiki states that hideout management hives 0.3% per level. But config says 1%. Ingame says 1%. Prefer config value.
         const hmSkillBoostPercent = this.dbGlobals.config.SkillsSettings.HideoutManagement.SkillBoostPercent; // precent per 1 level
-        // When calculating hideout management level (hmprogress/100) might wanna drop floating digits, but for now this works.
-        const hmAreaMultiplier = 1 + hmProgress / 100 * hmSkillBoostPercent / 100; // how much the intel tax reduction should be buffed
-        const intelTaxReduction = 1 - Math.abs(intelBonusVal) * hmAreaMultiplier / 100; // total intel center reduction with hideout management accounted for
+        // Important! When calculating hideout management level (hmprogress/100) truncate floating digits.
+        const hmAreaMultiplier = 1 + Math.trunc(hmProgress / 100) * hmSkillBoostPercent / 100; // how much the intel tax reduction should be buffed
+        const intelTaxModifier = 1 - intelBonusVal * hmAreaMultiplier / 100; // total intel center reduction with hideout management accounted for
         
+        tax *= intelTaxModifier;
+
+        const itemTpl = this.dbItems[item._tpl];
+        if (item == undefined) throw (`BrokerPriceManager | Couldn't find item with template ${item._tpl} when calculating flea tax!`);
+        tax *= itemTpl._props.RagFairCommissionModifier;
+
+        if (this.componentHelper.hasComponent(item, ItemComponentTypes.BUFF))
+        {
+            // "Points" is "Buff.value"
+            const buffComponent = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.BUFF);
+            const buffType = item.upd.Buff.buffType;
+            const priceModifier = (this.dbGlobals.config.RepairSettings.ItemEnhancementSettings[buffType] as IPriceModifier).PriceModifier;
+            tax *= 1 + Math.abs(buffComponent.points - 1) * priceModifier;
+        }
         // console.log(`[PURE TAX] ${pureTax}`);
         // console.log(`[HM AREA MULT] ${hmAreaMultiplier}`);
         // console.log(`[intel tax reduction CALC] ${Math.abs(intelBonusVal) * hmAreaMultiplier / 100}`);
         // console.log(`[intel tax reduction] ${intelTaxReduction}`);
 
-        // Might use trunc later to truncate the floating point.
-        return Math.round(pureTax * intelTaxReduction);
+        return Math.round(tax);
     }
 
     /**

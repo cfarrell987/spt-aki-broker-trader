@@ -57,7 +57,7 @@ namespace BrokerTraderPlugin
     internal static class PriceManager
     {
         public static readonly string[] SupportedTraderIds = new string[0];
-        public static Dictionary<string, int> ItemRagfairPriceTable { get; set; } = new Dictionary<string, int>();
+        public static Dictionary<string, double> ItemRagfairPriceTable { get; set; } = new Dictionary<string, double>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
         // Requests in a static constructor will be performed only once for initialization.
@@ -71,7 +71,7 @@ namespace BrokerTraderPlugin
             // Request ragfair item price table.
             response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
             ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
-            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, int>>(response);
+            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, double>>(response);
 
             // Request SupplyData from default SPT-AKI server route
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
