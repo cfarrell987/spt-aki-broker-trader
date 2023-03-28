@@ -10,6 +10,7 @@ namespace BrokerTraderPlugin
             // Plugin startup logic
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
             new PatchMerchantsList().Enable(); // Should be first to pull trader data and let PriceManager initialize.
+            new PatchTraderDealScreen().Enable(); // Selling money equivalent patch.
             new PatchGetUserItemPrice().Enable(); // Where the price actually gets applied.
 
         }

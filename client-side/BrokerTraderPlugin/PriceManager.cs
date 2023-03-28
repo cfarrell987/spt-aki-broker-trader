@@ -14,6 +14,7 @@ using Aki.Common.Utils;
 using Newtonsoft.Json;
 using static UnityEngine.UIElements.UIRAtlasManager;
 using Comfort.Common;
+using static UnityEngine.UIElements.StyleVariableResolver;
 
 namespace BrokerTraderPlugin
 {
@@ -56,6 +57,7 @@ namespace BrokerTraderPlugin
 
     internal static class PriceManager
     {
+        public const string BROKER_TRADER_ID = "broker-trader-id";
         public static readonly string[] SupportedTraderIds = new string[0];
         public static Dictionary<string, double> ItemRagfairPriceTable { get; set; } = new Dictionary<string, double>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
@@ -208,6 +210,30 @@ namespace BrokerTraderPlugin
             int amount = Convert.ToInt32(Math.Floor(requirementsPrice)); 
             Debug.LogError($"TplId {item.TemplateId} Item Tax {tax}, StackObjectsCount {item.StackObjectsCount}");
             return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
+        }
+
+        public static ItemPrice? GetBestItemPrice(Item item)
+        {
+            TraderItemPriceData traderPrice = GetBestTraderPrice(item);
+            RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
+            double ragfairAmount = ragfairPrice.Price?.Amount ?? 0;
+            if (traderPrice.Price != null && ragfairPrice.Price != null)
+            {
+                return ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles ? ragfairPrice.Price : traderPrice.Price;
+            }
+            else
+            {
+                if (traderPrice.Price != null && ragfairPrice.Price == null)
+                {
+                    return traderPrice.Price;
+                }
+                else if (ragfairPrice.Price != null && traderPrice.Price == null)
+                {
+                    return ragfairPrice.Price;
+                }
+            }
+            // as fallback return trader price
+            return traderPrice.Price;
         }
         private static void ThrowIfNullResponse(string response, string message)
         {

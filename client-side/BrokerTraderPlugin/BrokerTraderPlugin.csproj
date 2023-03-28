@@ -42,5 +42,8 @@
 		<Reference Include="ItemComponent.Types">
 			<HintPath>dependencies\ItemComponent.Types.dll</HintPath>
 		</Reference>
+		<Reference Include="Unity.TextMeshPro">
+			<HintPath>dependencies\Unity.TextMeshPro.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 </Project>

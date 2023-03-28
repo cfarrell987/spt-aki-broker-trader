@@ -13,6 +13,7 @@ using System.Text;
 using Aki.Common.Http;
 
 using ItemPrice = TraderClass.GStruct219;
+using CurrencyHelper = GClass2179;
 using Diz.Skinning;
 using static MonoMod.Cil.RuntimeILReferenceBag.FastDelegateInvokers;
 using EFT;
@@ -21,10 +22,14 @@ using static UnityEngine.ParticleSystem;
 using Aki.Common.Utils;
 using UnityEngine;
 using UnityEngine.Networking.Match;
+
 using static BrokerTraderPlugin.PriceManager;
+using TMPro;
+using System.Text.RegularExpressions;
 
 namespace PricePatch
 {
+    //  Pull the TraderClass enumerable from EFT.UI.MerchantsList
     public class PatchMerchantsList : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
@@ -67,9 +72,9 @@ namespace PricePatch
             Logger.LogMessage($"[BROKER TRADER] PriceManager.TradersList count {PriceManager.TradersList.Count()}");
         }
     }
+    //  Patch price calculation method in TraderClass
     public class PatchGetUserItemPrice : ModulePatch
     {
-        private const string BROKER_TRADER_ID = "broker-trader-id";
         protected override MethodBase GetTargetMethod()
         {
             //TraderClass - GetUserItemPrice - WORKS! use postfix patch 
@@ -96,26 +101,7 @@ namespace PricePatch
                     TraderItemPriceData traderPrice = GetBestTraderPrice(item);
                     RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
                     Logger.LogMessage($"[BROKER PRICE] Trader: {Json.Serialize(traderPrice.Price)} Ragfair: {Json.Serialize(ragfairPrice)}");
-                    double ragfairAmount = ragfairPrice.Price?.Amount ?? 0;
-                    //Logger.LogMessage($"[BROKER TAX] One : {GClass1969.CalculateTaxPrice(item, 1, ragfairAmount, true)}");
-                    //Logger.LogMessage($"[BROKER TAX] STACK : {GClass1969.CalculateTaxPrice(item, item.StackObjectsCount, ragfairAmount, true)}");
-                    //Logger.LogMessage($"[BROKER TAX] One : {GClass1969.CalculateTaxPrice(item, 1, ragfairAmount, false)}");
-                    //Logger.LogMessage($"[BROKER TAX] STACK : {GClass1969.CalculateTaxPrice(item, item.StackObjectsCount, ragfairAmount, false)}");
-                    if (traderPrice.Price != null && ragfairPrice.Price != null)
-                    {
-                        __result = ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles ? ragfairPrice.Price : traderPrice.Price;
-                    }
-                    else
-                    {
-                        if (traderPrice.Price != null && ragfairPrice.Price == null)
-                        {
-                            __result = traderPrice.Price;
-                        }
-                        else if (ragfairPrice.Price != null && traderPrice.Price == null)
-                        {
-                            __result = ragfairPrice.Price;
-                        }
-                    }
+                    __result = GetBestItemPrice(item);
                     //TraderClass bestTrader = PriceManager.TradersList.First();
                     //SellItemPrice? bestPrice = PriceManager.GetUserItemPriceInRoubles(bestTrader, item);
                     //Logger.LogInfo($"First Trader Name {bestTrader.LocalizedName}");
@@ -146,8 +132,44 @@ namespace PricePatch
 
         }
     }
+    //  Change how total transaction sum behaves when selling to trader
+    public class PatchTraderDealScreen : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod()
+        {
+            // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
+            return typeof(TraderDealScreen).GetMethod("method_10", BindingFlags.Instance | BindingFlags.NonPublic);
+        }
 
+        [PatchPostfix]
+        private static void PatchPostfix(TraderDealScreen __instance)
+        {
+            var trader = typeof(TraderDealScreen).GetField("gclass1949_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TraderClass;
+            var _equivalentSumValue = typeof(TraderDealScreen).GetField("_equivalentSumValue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TextMeshProUGUI;
+            if (trader.Id == BROKER_TRADER_ID)
+            {
+                List<ItemPrice?> source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
+                if (!source.Any()) _equivalentSumValue.text = "";
+                else
+                {
+                    //_equivalentSumValue.text = "ПАШОЛ НАХУЙ БОМЖ";
+                    var groupByCurrency = source.GroupBy(price => price.GetValueOrDefault().CurrencyId).Select(currencyGroup => new
+                    {
+                        CurrencyId = currencyGroup.Key,
+                        Amount = currencyGroup.Sum(price => price.GetValueOrDefault().Amount),
+                    });
+                    // Rouble amount has to be always first. Since Broker's main currency is RUB.
+                    _equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
+                    foreach (var currency in groupByCurrency.Where(group => group.CurrencyId != CurrencyHelper.ROUBLE_ID))
+                    {
+                        _equivalentSumValue.text += $" + {CurrencyHelper.GetCurrencyCharById(currency.CurrencyId)} {currency.Amount}";
+                    }
+                }
+            }
+            Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))");
+            _equivalentSumValue.text = regex.Replace(_equivalentSumValue.text, " ");
+        }
+    }
 
-    //  Pull the TraderClass enumerable from EFT.UI.MerchantsList
 
 }
