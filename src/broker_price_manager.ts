@@ -35,7 +35,7 @@ import { ItemComponentHelper, ItemComponentTypes, ItemPointsData } from "./item_
 interface BrokerPriceManagerCache
 {
     tradersMetaData: TradersMetaData;
-    itemTraderTable: Record<string, TraderBaseData>;
+    itemTraderTable: Record<string, TraderMetaData>;
     itemRagfairPriceTable: Record<string, number>;
 }
 
@@ -68,7 +68,7 @@ class BrokerPriceManager
     public supportedTraders: Record<string, string>;
 
     private _tradersMetaData: TradersMetaData;
-    private _itemTraderTable: Record<string, TraderBaseData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
+    private _itemTraderTable: Record<string, TraderMetaData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
     private _itemRagfairPriceTable: Record<string, number>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
     private constructor(container?: DependencyContainer)
@@ -206,7 +206,7 @@ class BrokerPriceManager
         return this._tradersMetaData;
     }
 
-    public get itemTraderTable(): Record<string, TraderBaseData>
+    public get itemTraderTable(): Record<string, TraderMetaData>
     {
         return this._itemTraderTable;
     }
@@ -216,7 +216,7 @@ class BrokerPriceManager
         return this._itemRagfairPriceTable;
     }
 
-    public getItemTraderTable(): Record<string, TraderBaseData>
+    public getItemTraderTable(): Record<string, TraderMetaData>
     {
         // Also check if item exists in handbook to be sure that it's a valid item.
         return Object.keys(this.dbItems).filter(itemTplId => this.itemHelper.isValidItem(itemTplId) && this.existsInHandbook(itemTplId)).reduce((accum, itemTplId) => 
@@ -268,40 +268,74 @@ class BrokerPriceManager
         return data;
     }
 
-    public canBeBoughtByTrader(itemTplId: string, traderId: string ): boolean
+    /**
+     * Check if an item can be sold to a trader.
+     * Makes sure that both conditions are met: trader buys item template and item condition passes restrictions.
+     * If trader is Fence - restrictions are not accounted.
+     * @param pmcData PMC to whom item belongs.
+     * @param item Item to check.
+     * @param traderId Id of the trader to check.
+     * @returns true | false
+     */
+    public canBeSoldToTrader(pmcData: IPmcData, item: Item, traderId: string): boolean
+    {
+        const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+        return !itemAndChildren.some(item => !this.canTemplateBeSoldToTrader(item._tpl, traderId) || !this.passesBuyoutRestrictions(item, traderId === Traders.FENCE));
+    }
+
+    /**
+     * Check if item template can be sold to trader.
+     * @param itemTplId Item Template Id
+     * @param traderId Trader Id
+     * @returns true | false
+     */
+    public canTemplateBeSoldToTrader(itemTplId: string, traderId: string ): boolean
     {
         const traderMetaData = this._tradersMetaData[traderId];
-        // const item = this.dbItems[itemTplId];
-        // Might use itemBaseClassService but right now seems unnecessary
-        // Also a very good option is itemHelpes.isOfBaseClass, check for every category (category.some()).
         const buysItem = traderMetaData.itemsBuy.category.some(categoryId => this.itemHelper.isOfBaseclass(itemTplId, categoryId)) || traderMetaData.itemsBuy.id_list.includes(itemTplId);
         const notProhibited = !traderMetaData.itemsBuyProhibited.category.some(categoryId => this.itemHelper.isOfBaseclass(itemTplId, categoryId)) && !traderMetaData.itemsBuyProhibited.id_list.includes(itemTplId);
         return buysItem && notProhibited;
     }
 
-    public getBestTraderForItemTpl(itemTplId: string): TraderBaseData
+    /**
+     * Get the most profitable trader for an item.
+     * @param pmcData PMC to whom item belongs.
+     * @param item Item
+     * @returns TraderMetaData
+     */
+    public getBestTraderForItem(pmcData: IPmcData, item: Item): TraderMetaData
     {
-        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canBeBoughtByTrader(itemTplId, traderMeta.id));
+        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canBeSoldToTrader(pmcData, item, traderMeta.id));
         if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
         // the lower the coef the more money you'll get
         const lowestCoef = Math.min(...sellableTraders.map(trader => trader.buyPriceCoef));
         return sellableTraders.find(trader => trader.buyPriceCoef === lowestCoef);
     }
 
-    // Remove later
-    public getBestTraderForItem(item: Item): TraderBaseData
+    /**
+     * Get the most profitable trader for an item template.
+     * @param itemTplId Item Template
+     * @returns TraderMetaData
+     */
+    public getBestTraderForItemTpl(itemTplId: string): TraderMetaData
     {
-        // Preserve game balance, by checking if item should be sold to Fence.
-        // Even if for some reason Fence doesn't buy this item category(probably shouldn't even be possible)
-        // it will be force sold to him anyway
-        return !this.passesBuyoutRestrictions(item, false)
-            ? this._tradersMetaData[Traders.FENCE]
-            : this.getBestTraderForItemTpl(item._tpl);
+        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canTemplateBeSoldToTrader(itemTplId, traderMeta.id));
+        if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
+        // the lower the coef the more money you'll get
+        const lowestCoef = Math.min(...sellableTraders.map(trader => trader.buyPriceCoef));
+        return sellableTraders.find(trader => trader.buyPriceCoef === lowestCoef);
     }
 
+    /**
+     * Get the most profitable sell decision for an item. 
+     * Selects between selling to most profitable trader or ragfair.
+     * @param pmcData PMC to whom item belongs.
+     * @param item Item 
+     * @returns SellDecision
+     */
     public getBestSellDecisionForItem(pmcData: IPmcData, item: Item): SellDecision
     {
-        const bestTrader = this.getBestTraderForItem(item);
+        const bestTrader = this.getBestTraderForItem(pmcData, item);
         const traderPrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
         // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
         // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in SPT-AKI
@@ -356,7 +390,7 @@ class BrokerPriceManager
         //Therapist=0.63, Ragman=0.62, Jaeger=0.6, Mechanic=0.56, Prapor=0.5, Skier=0.49, Peacekeeper=0.45, Fence=0.4.
         //Durability of items or number of uses affects the base price, so in order to get the base price of full items, don't compare with damaged/used ones.
         // const basePrice = this.handbookHelper.getTemplatePrice(item._tpl);
-        const bestTrader = this.getBestTraderForItem(item);
+        const bestTrader = this.getBestTraderForItem(pmcData, item);
         const basePrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
 
         const Q = sellInOnePiece ? offerItemCount : 1;
@@ -503,7 +537,8 @@ class BrokerPriceManager
     // Reference - "TraderClass.GetUserItemPrice"
     public getItemTraderPrice(pmcData: IPmcData, item: Item, traderId: string): number
     {
-        if (!this.canBeBoughtByTrader(item._tpl, traderId)) return 0;
+        if (!this.canBeSoldToTrader(pmcData, item, traderId)) return 0;
+
         const traderMeta = this._tradersMetaData[traderId];
         if (traderMeta == undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
 
@@ -638,6 +673,25 @@ class BrokerPriceManager
     //     // console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
     //     return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemTraderPrice(curr, traderId), 0);
     // }
+
+
+    public isMissingVitalParts(item: Item): boolean
+    {
+        return this.getMissingVitalPartsCount(item) > 0;
+    }
+
+    public getMissingVitalPartsCount(item: Item): number
+    {
+        //const tpl = this.dbItems[item._tpl];
+        //tpl._props.Slots[0].
+        return 0;
+    }
+
+    public getVitalParts(item: Item): any
+    {
+        //item.slotId
+        return;
+    }
 
     /**
      * Gets ragfair avg and perPoint price for template, accesses the cached price table.
@@ -799,7 +853,7 @@ interface SellDecision
     price: number;
     tax?: number;
 }
-interface TraderBaseData
+interface TraderMetaData
 {
     id: string;
     name: string;
@@ -811,7 +865,7 @@ interface TraderBaseData
 
 interface TradersMetaData 
 {
-    [traderId: string]: TraderBaseData
+    [traderId: string]: TraderMetaData
 }
 
 /**
