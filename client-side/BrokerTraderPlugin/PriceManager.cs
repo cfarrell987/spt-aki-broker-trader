@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using ItemPrice = TraderClass.GStruct219;
 using CurrencyHelper = GClass2179;
 using PriceHelper = GClass1969;
@@ -12,9 +11,7 @@ using UnityEngine;
 using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
-using static UnityEngine.UIElements.UIRAtlasManager;
 using Comfort.Common;
-using static UnityEngine.UIElements.StyleVariableResolver;
 
 namespace BrokerTraderPlugin
 {
@@ -55,6 +52,24 @@ namespace BrokerTraderPlugin
         }
     }
 
+    internal struct BrokerItemSellData
+    {
+        public string ItemId { get; set; }
+        public string TraderId { get; set; }
+        public int Price { get; set; }
+        public int PriceInRoubles { get; set; }
+        public int Tax { get; set; }
+
+        public BrokerItemSellData(string itemId, string traderId, int price, int priceInRoubles, int tax)
+        {
+            ItemId = itemId;
+            TraderId = traderId;
+            Price = price;
+            PriceInRoubles = priceInRoubles;
+            Tax = tax;
+        }
+    }
+
     internal static class PriceManager
     {
         public const string BROKER_TRADER_ID = "broker-trader-id";
@@ -66,12 +81,12 @@ namespace BrokerTraderPlugin
         static PriceManager()
         {
             // Request supported trader ids
-            string response = RequestHandler.GetJson("/broker-trader/supported-trader-ids");
+            string response = RequestHandler.GetJson("/broker-trader/get/supported-trader-ids");
             ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get SupportedTraderIds!");
             SupportedTraderIds = Json.Deserialize<string[]>(response);
 
             // Request ragfair item price table.
-            response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
+            response = RequestHandler.GetJson("/broker-trader/get/item-ragfair-price-table");
             ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
             ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, double>>(response);
 
@@ -86,7 +101,7 @@ namespace BrokerTraderPlugin
             }
         }
         // Gets the best paying trader and his price data.
-        public static TraderItemPriceData GetBestTraderPrice(Item item)
+        public static TraderItemPriceData GetBestTraderPriceData(Item item)
         {
             // Shouldn't happen, since tradersList will be assigned post MerchantsList.Show(),
             // before user opens any trader window.
@@ -169,7 +184,7 @@ namespace BrokerTraderPlugin
                 //
                 // bruh
                 requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
-                
+
             }
             ResourceComponent resourceComponent;
             if (item.TryGetItemComponent<ResourceComponent>(out resourceComponent) && resourceComponent.MaxResource > 0f)
@@ -205,18 +220,15 @@ namespace BrokerTraderPlugin
             }
             requirementsPrice *= item.StackObjectsCount;
             // !IMPORTANT Round the tax
-            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true))); 
+            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
             // !IMPORTANT Floor the price
-            int amount = Convert.ToInt32(Math.Floor(requirementsPrice)); 
-            Debug.LogError($"TplId {item.TemplateId} Item Tax {tax}, StackObjectsCount {item.StackObjectsCount}");
+            int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
             return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
         }
-
         public static ItemPrice? GetBestItemPrice(Item item)
         {
-            TraderItemPriceData traderPrice = GetBestTraderPrice(item);
+            TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            double ragfairAmount = ragfairPrice.Price?.Amount ?? 0;
             if (traderPrice.Price != null && ragfairPrice.Price != null)
             {
                 return ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles ? ragfairPrice.Price : traderPrice.Price;
@@ -234,6 +246,31 @@ namespace BrokerTraderPlugin
             }
             // as fallback return trader price
             return traderPrice.Price;
+        }
+        // Looks messy as fuck, but whatever. Maybe going through Tarkov's source code has affected me.
+        public static BrokerItemSellData GetBrokerItemSellData(Item item)
+        {
+            TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
+            RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
+            if (traderPrice.Price != null && ragfairPrice.Price != null)
+            {
+                return ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles
+                    ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax)
+                    : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
+            }
+            else
+            {
+                if (traderPrice.Price != null && ragfairPrice.Price == null)
+                {
+                    return new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
+                }
+                else if (ragfairPrice.Price != null && traderPrice.Price == null)
+                {
+                    return new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax);
+                }
+            }
+            // as fallback return trader price
+            return new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
         }
         private static void ThrowIfNullResponse(string response, string message)
         {

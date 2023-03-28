@@ -39,6 +39,15 @@ interface BrokerPriceManagerCache
     itemRagfairPriceTable: Record<string, number>;
 }
 
+interface BrokerSellData
+{
+    ItemId: string;
+    TraderId: string;
+    Price: number;
+    PriceInRoubles: number;
+    Tax: number;
+}
+
 class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
@@ -71,6 +80,8 @@ class BrokerPriceManager
     private _itemTraderTable: Record<string, TraderMetaData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
     private _itemRagfairPriceTable: Record<string, number>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
+    private _clientBrokerSellData: Record<string, BrokerSellData> = {};
+
     private constructor(container?: DependencyContainer)
     {
         this._container = container ?? tsyringeContainer;
@@ -100,6 +111,12 @@ class BrokerPriceManager
             return accum;
         }, {}); // make sure it doesn't have the "broker-trader" in it, because he has a coef of 0, which allows him to accurately display his sell prices ingame
         // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
+    }
+
+    public setClientBrokerPriceData(data: Record<string, BrokerSellData>): void
+    {
+        this._clientBrokerSellData = data;
+        console.log(`[SET BROKER DATA] ${JSON.stringify(this._clientBrokerSellData)}`);
     }
 
     /**
@@ -335,6 +352,18 @@ class BrokerPriceManager
      */
     public getBestSellDecisionForItem(pmcData: IPmcData, item: Item): SellDecision
     {
+        if (this._clientBrokerSellData[item._id] != undefined)
+        {
+            console.log(`[BROKER] RECEIVED SELL DATA FROM CLIENT FOR ${item._id}`);
+            const clientSellData = this._clientBrokerSellData[item._id];
+            return {
+                traderId: clientSellData.TraderId,
+                price: clientSellData.Price,
+                priceInRoubles: clientSellData.PriceInRoubles,
+                tax: clientSellData.Tax
+            };
+        }
+        console.log(`[${modInfo.name} ${modInfo.version}] Couldn't find Client Sell Data for item id ${item._id}. Processing by server. If this happens very often, inform the developer.`);
         const bestTrader = this.getBestTraderForItem(pmcData, item);
         const traderPrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
         // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
@@ -487,13 +516,12 @@ class BrokerPriceManager
             const itemTax = (sellDecision.tax ?? 0);
             const profit = itemPrice - itemTax;
             const profitInRoubles = sellDecision.priceInRoubles - itemTax;
-            // const requestPrice = itemPrice - itemTax;
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
             if (accum[groupByTraderId] == undefined)
             {
-                // Creating new group
+                // Create new group
                 accum[groupByTraderId] = {
                     isFleaMarket: BrokerPriceManager.isBrokerTraderId(groupByTraderId),
                     traderName: this._tradersMetaData[groupByTraderId].name,
@@ -525,7 +553,7 @@ class BrokerPriceManager
                 accum[groupByTraderId].fullItemCount += fullItemCount;
 
                 accum[groupByTraderId].requestBody.items.push(currItem);
-                accum[groupByTraderId].requestBody.price += profit; // important, subtract the tax to properly calculate profit
+                accum[groupByTraderId].requestBody.price += profit;
             }
             return accum;
         }, {} as ProcessedSellData);

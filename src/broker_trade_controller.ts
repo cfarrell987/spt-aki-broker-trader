@@ -50,21 +50,12 @@ export class BrokerTradeController extends TradeController
     {
         // Exceptions seem to be handled somewhere where this method is used.
         // And due to the way they are handled - only "error" is displayed instead of the actual error msg.
-        // This sort of fixes it.     
+        // This sort of fixes it sometimes.     
         try 
         {
             if (body.tid === baseJson._id)
             {
-                const logPrefix = `[${modInfo.name} ${modInfo.version}]`;
-                // if (body.type === "buy_from_trader") 
-                // {
-                //     const buyRequestBody = body as IProcessBuyTradeRequestData;
-                //     // this.logger.log(JSON.stringify(buyData), LogTextColor.CYAN);
-
-                //     // Remove this, since purchase action should be ignore, call super instead.
-                //     return this.tradeHelper.buyItem(pmcData, buyRequestBody, sessionID, foundInRaid, upd);
-                // }
-        
+                const logPrefix = `[${modInfo.name} ${modInfo.version}]`;        
                 if (body.type === "sell_to_trader") 
                 {
                     const priceManager = BrokerPriceManager.instance;
@@ -85,7 +76,7 @@ export class BrokerTradeController extends TradeController
     
                     const responses: IItemEventRouterResponse[] = [];
                     const sellReqDataPerTrader = priceManager.processSellRequestDataForMostProfit(pmcData, sellRequestBody);
-    
+
                     for (const traderId in sellReqDataPerTrader)
                     {
                         const tReqData = sellReqDataPerTrader[traderId];
@@ -165,20 +156,6 @@ export class BrokerTradeController extends TradeController
             throw "error";
         }
     }
-
-    // public override confirmRagfairTrading(pmcData: IPmcData, body: IProcessRagfairTradeRequestData, sessionID: string): IItemEventRouterResponse 
-    // {
-    //     const ragfairOfferService = container.resolve<RagfairOfferService>(RagfairOfferService.name);
-    //     for (const offer of body.offers)
-    //     {
-    //         const ragfairOffer = ragfairOfferService.getOfferByOfferId(offer.id);
-    //         this.logger.warning(`OFFER DUMP: ${JSON.stringify(ragfairOffer)}`);
-    //     }
-    //     const result = super.confirmRagfairTrading(pmcData, body, sessionID);
-    //     this.logger.log(JSON.stringify(body), LogTextColor.CYAN);
-    //     this.logger.log(JSON.stringify(result), LogTextColor.CYAN);
-    //     return result;
-    // }
 
     /**
      * @deprecated After testing responses seem to be merging changes automatically. Probably should've tested it before hand fml hahah.
@@ -344,6 +321,12 @@ export class BrokerTradeController extends TradeController
         // return addOfferResult;
     }
 
+    /**
+     * @deprecated
+     * @param itemId 
+     * @param pmcData 
+     * @returns 
+     */
     // Find item by it's id in inventory. If not found return undefined.
     private getItemFromInventoryById(itemId: string, pmcData: IPmcData): Item
     {        

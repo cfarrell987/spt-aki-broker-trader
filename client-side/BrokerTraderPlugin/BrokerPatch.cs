@@ -1,33 +1,21 @@
 ﻿using Aki.Reflection.Patching;
-using BepInEx;
 using BrokerTraderPlugin;
 using EFT.InventoryLogic;
 using EFT.UI;
-using EFT.UI.DragAndDrop;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text;
 using Aki.Common.Http;
 
 using ItemPrice = TraderClass.GStruct219;
 using CurrencyHelper = GClass2179;
-using Diz.Skinning;
-using static MonoMod.Cil.RuntimeILReferenceBag.FastDelegateInvokers;
-using EFT;
-using System.ComponentModel;
-using static UnityEngine.ParticleSystem;
 using Aki.Common.Utils;
-using UnityEngine;
-using UnityEngine.Networking.Match;
 
 using static BrokerTraderPlugin.PriceManager;
 using TMPro;
 using System.Text.RegularExpressions;
 
-namespace PricePatch
+namespace BrokerPatch
 {
     //  Pull the TraderClass enumerable from EFT.UI.MerchantsList
     public class PatchMerchantsList : ModulePatch
@@ -98,7 +86,7 @@ namespace PricePatch
                     //var bestPrice = GetBestTraderPrice(item);
                     //Logger.LogInfo($"TRADER {bestPrice.Trader.LocalizedName} ROUBLE AMOUNT {bestPrice.RoubleAmount}");
                     //Logger.LogInfo(Json.Serialize(GetBestSellItemPrice(item)));
-                    TraderItemPriceData traderPrice = GetBestTraderPrice(item);
+                    TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
                     RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
                     Logger.LogMessage($"[BROKER PRICE] Trader: {Json.Serialize(traderPrice.Price)} Ragfair: {Json.Serialize(ragfairPrice)}");
                     __result = GetBestItemPrice(item);
@@ -132,7 +120,7 @@ namespace PricePatch
 
         }
     }
-    //  Change how total transaction sum behaves when selling to trader
+    //  Change how total transaction sum is generated when selling to trader.
     public class PatchTraderDealScreen : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
@@ -170,9 +158,8 @@ namespace PricePatch
             _equivalentSumValue.text = regex.Replace(_equivalentSumValue.text, " ");
         }
     }
-
-    //  WIP. Send accurate client item data to server.
-    public class PatchConfirmSell : ModulePatch
+    //  Send accurate client item data to server when user pressed "DEAL!" on the trade screen.
+    public class PatchTraderAssortmentController : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
         {
@@ -180,12 +167,25 @@ namespace PricePatch
             return typeof(TraderAssortmentControllerClass).GetMethod("Sell", BindingFlags.Instance | BindingFlags.Public);
         }
 
-        [PatchPostfix]
-        private static void PatchPostfix(TraderAssortmentControllerClass __instance)
+        // Prefer prefix patch to make sure that the request is 
+        [PatchPrefix]
+        private static void PatchPrefix(TraderAssortmentControllerClass __instance)
         {
             var trader = __instance.GetType().GetField("gclass1949_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TraderClass;
-            Logger.LogMessage($"Confirming sell to trader {trader.LocalizedName}");
+            if (trader.Id == BROKER_TRADER_ID)
+            {
+                // Both are probably be identical, but use lower for consistency with source code.
+                // var soldItems = __instance.SellingStash.Containers.First().Items; 
+                var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList();
+                if(soldItems.Count > 0)
+                {
+                    Dictionary<string, BrokerItemSellData> sellData = soldItems.Select(GetBrokerItemSellData).ToDictionary(data => data.ItemId);
+                    RequestHandler.PostJson("/broker-trader/post/sold-items-data", Json.Serialize(sellData));
+                }
+            }
         }
+
+        
     }
 
 }

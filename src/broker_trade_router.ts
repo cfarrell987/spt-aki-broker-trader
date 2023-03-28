@@ -31,26 +31,26 @@ export class BrokerTraderRouter
             "BrokerTraderRouter",
             [
                 {
-                    url: "/broker-trader/supported-trader-ids",
+                    url: "/broker-trader/get/supported-trader-ids",
                     action: (url, info, sessionId, output) =>
                     {
-                        return this.respondSupportedTraderIds();
+                        return this.respondGetSupportedTraderIds();
                     }
                 },
                 {
-                    url: "/broker-trader/item-ragfair-price-table",
+                    url: "/broker-trader/get/item-ragfair-price-table",
                     action: (url, info, sessionId, output) =>
                     {
-                        return this.respondItemRagfairPriceTable();
+                        return this.respondGetItemRagfairPriceTable();
                     }
                 },
                 {
                     // WIP. Use for receiving data from client.
-                    url: "/broker-trader/receive-client-item-data",
+                    url: "/broker-trader/post/sold-items-data",
                     action: (url, info, sessionId, output) =>
                     {
-                        console.log("WIP");
-                        return "WIP";
+                        console.log(`[BROKER] ${JSON.stringify(info)}`);
+                        return this.respondPostSoldItemsData(info);
                     }
                 }
             ],
@@ -58,13 +58,19 @@ export class BrokerTraderRouter
         )
     }
 
-    private static respondSupportedTraderIds(): string
+    private static respondGetSupportedTraderIds(): string
     {
         return this.http.noBody(Object.values(BrokerPriceManager.instance.supportedTraders));
     }
     
-    private static respondItemRagfairPriceTable(): string
+    private static respondGetItemRagfairPriceTable(): string
     {
         return this.http.noBody(BrokerPriceManager.instance.itemRagfairPriceTable);
+    }
+
+    private static respondPostSoldItemsData(info: any): string
+    {
+        BrokerPriceManager.instance.setClientBrokerPriceData(info);
+        return this.http.noBody("OK"); // Response is not really processed in the client in any way.
     }
 }
