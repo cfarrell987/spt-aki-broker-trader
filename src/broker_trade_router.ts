@@ -43,6 +43,15 @@ export class BrokerTraderRouter
                     {
                         return this.respondItemRagfairPriceTable();
                     }
+                },
+                {
+                    // WIP. Use for receiving data from client.
+                    url: "/broker-trader/receive-client-item-data",
+                    action: (url, info, sessionId, output) =>
+                    {
+                        console.log("WIP");
+                        return "WIP";
+                    }
                 }
             ],
             "broker-trader"

@@ -102,11 +102,10 @@ export class BrokerTradeController extends TradeController
                         else 
                         {
                             const tCurrency = BrokerPriceManager.instance.tradersMetaData[traderId].currency;
-                            const rubPrice = tReqData.totalProfit;
                             let profitMsg = 
-                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. Profit ${BrokerPriceManager.getNumberWithSpaces(rubPrice)} RUB`;
+                                `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. Profit ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfitInRoubles)} RUB`;
                             if (tCurrency !== "RUB")
-                                profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(Math.floor(priceManager.convertRoublesToTraderCurrency(rubPrice, traderId)))})`;
+                                profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)})`;
                             verboseLogger.explicitSuccess(profitMsg);
                         }
     

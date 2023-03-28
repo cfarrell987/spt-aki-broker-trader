@@ -345,72 +345,55 @@ class BrokerPriceManager
         // console.log(`[ragfairPrice] ${ragfairPrice}`);      
         // console.log(`[TAX] ${this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)}`);
         // console.log("PARAMS:",item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true);
+
+        // Tarkov price logic is simple - Math.Floor profits, Math.Ceil losses.
         if (ragfairPrice > traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
         {
             return {
                 traderId: BrokerPriceManager.brokerTraderId,
-                price: ragfairPrice,
-                tax: this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0
+                price: Math.floor(ragfairPrice),
+                priceInRoubles: Math.floor(ragfairPrice),
+                tax: Math.ceil(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
             };
         }
         return {
             traderId: bestTrader.id,
-            price: traderPrice
+            price: Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)),
+            priceInRoubles: Math.floor(traderPrice)
         };
     }
 
     /**
      * Calculates the flea tax while taking in account user's Intelligence Center bonus and Hideout Management skill.
      * 
-     * Had to make it myself since the provided RagfairTaxHelper.calculateTax is unreliable and sometimes returned NULL.
+     * Had to make it myself since the RagfairTaxHelper.calculateTax is not accurate and sometimes returned NULL.
      * @param item Item to evaluate the tax.
      * @param pmcData PMC profile to whom the item belongs.
-     * @param requirementsValue The price you want to sell the item for.
+     * @param requirementsPrice The price you want to sell the item for.
      * @param offerItemCount How many items in the flea offer.
      * @param sellInOnePiece Sell in batch or not.
      * @returns Flea tax value.
      */
-    public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsValue: number, offerItemCount: number, sellInOnePiece: boolean): number
+    // Reference "GClass1969.CalculateTaxPrice()"
+    public getItemRagfairTax(item: Item, pmcData: IPmcData, requirementsPrice: number, offerItemCount: number, sellInOnePiece: boolean): number
     {
-        //         Tax
-        // The fee you'll have to pay to post an offer on Flea Market is calculated using the following formula:
-        // VO × Ti × 4^PO × Q + VR × Tr × 4^PR × Q
-        // Where:
-        // VO is the total value of the offer, calculated by multiplying the base price of the item times the amount (base price × total item count / Q). The Base Price is a predetermined value for each item.
-        // VR is the total value of the requirements, calculated by adding the product of each requirement base price by their amount.
-        // PO is a modifier calculated as log10(VO / VR).
-        // If VR is less than VO then PO is also raised to the power of 1.08.
-        // PR is a modifier calculated as log10(VR / VO).
-        // If VR is greater or equal to VO then PR is also raised to the power of 1.08.
-        // Q is the "quantity" factor which is either 1 when "Require for all items in offer" is checked or the amount of items being offered otherwise.
-        // Ti and Tr are tax constants; currently set to Ti = 0.03 and Tr = 0.03
+        if (requirementsPrice < 1 || offerItemCount < 1) return 0;
 
-        if (requirementsValue < 1 || offerItemCount < 1) return 0;
-
-        // Wiki info is mostly okay, but decompiled code says that the base price is buyout price, not trader price.
-        const basePrice = this.getBuyoutPriceForAllItems(pmcData, item, true); // isFence explicitly true, to skip "passesRestrictions"
-
-        
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const Q = sellInOnePiece ? offerItemCount : 1;
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const VO = basePrice * offerItemCount / Q;
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const VR = requirementsValue;
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        let PO = Math.log10(VO/VR);
-        if (VR < VO) PO = Math.pow(PO, 1.08);
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        let PR = Math.log10(VR/VO);
-        if (VR >= VO) PR = Math.pow(PR, 1.08);
-
+        const num = this.getBaseTaxForAllItems(pmcData, item, offerItemCount);
+        requirementsPrice *= sellInOnePiece ? 1 : offerItemCount;
         const ragfairConfig = this.dbGlobals.config.RagFair;
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const Ti = ragfairConfig.communityItemTax / 100; // 0.03;
-        // eslint-disable-next-line @typescript-eslint/naming-convention
-        const Tr = ragfairConfig.communityRequirementTax / 100; // 0.03;
+        const num2 = ragfairConfig.communityItemTax / 100;
+        const num3 = ragfairConfig.communityRequirementTax / 100;
+        let num4 = Math.log10(num / requirementsPrice);
+        let num5 = Math.log10(requirementsPrice / num);
+        if (requirementsPrice >= num)
+            num5 = Math.pow(num5, 1.08);
+        else
+            num4 = Math.pow(num4, 1.08);
+        num5 = Math.pow(4.0, num5);
+        num4 = Math.pow(4.0, num4);
 
-        let tax = VO * Ti * Math.pow(4, PO) * Q + VR * Tr * Math.pow(4, PR) * Q;
+        let num6 = num * num2 * num4 + requirementsPrice * num3 * num5;
 
         // Accounts for only one flea tax reduction bonus, since no other hideout are provides such bonuses.
         const intelBonus = pmcData.Bonuses.find(bonus => bonus.type === "RagfairCommission");
@@ -425,12 +408,16 @@ class BrokerPriceManager
         // Important! When calculating hideout management level (hmprogress/100) truncate floating digits.
         const hmAreaMultiplier = 1 + Math.trunc(hmProgress / 100) * hmSkillBoostPercent / 100; // how much the intel tax reduction should be buffed
         const intelTaxModifier = 1 - intelBonusVal * hmAreaMultiplier / 100; // total intel center reduction with hideout management accounted for
-        
-        tax *= intelTaxModifier;
+
+        // console.log(`[INTEL BONUS VAL] ${intelBonusVal}`)
+        // console.log(`[H M MODIFIER] ${hmAreaMultiplier}`)
+        // console.log(`[INTEL TAX MODIFIER] ${intelTaxModifier}`)
+
+        num6 *= intelTaxModifier;
 
         const itemTpl = this.dbItems[item._tpl];
         if (item == undefined) throw (`BrokerPriceManager | Couldn't find item with template ${item._tpl} when calculating flea tax!`);
-        tax *= itemTpl._props.RagFairCommissionModifier;
+        num6 *= itemTpl._props.RagFairCommissionModifier;
 
         if (this.componentHelper.hasComponent(item, ItemComponentTypes.BUFF))
         {
@@ -438,14 +425,17 @@ class BrokerPriceManager
             const buffComponent = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.BUFF);
             const buffType = item.upd.Buff.buffType;
             const priceModifier = (this.dbGlobals.config.RepairSettings.ItemEnhancementSettings[buffType] as IPriceModifier).PriceModifier;
-            tax *= 1 + Math.abs(buffComponent.points - 1) * priceModifier;
+            num6 *= 1 + Math.abs(buffComponent.points - 1) * priceModifier;
         }
-        // console.log(`[PURE TAX] ${pureTax}`);
-        // console.log(`[HM AREA MULT] ${hmAreaMultiplier}`);
-        // console.log(`[intel tax reduction CALC] ${Math.abs(intelBonusVal) * hmAreaMultiplier / 100}`);
-        // console.log(`[intel tax reduction] ${intelTaxReduction}`);
 
-        return Math.round(tax);
+        return Math.ceil(num6);
+    }
+
+    public getBaseTaxForAllItems(pmcData: IPmcData, item: Item, itemCount: number, basePriceSrc?: Record<string, number>): number
+    {
+        const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+        // pass isFence explicitly true, to skip "passesRestrictions"
+        return itemAndChildren.reduce((accum, curr) => accum + this.getBuyoutPriceForSingleItem(curr, (curr._id === item._id) ? itemCount : 0, true, basePriceSrc), 0);
     }
 
     /**
@@ -493,12 +483,11 @@ class BrokerPriceManager
             const inventoryItem = this.getItemFromInventoryById(currItem.id, pmcData);
             const sellDecision = this.getBestSellDecisionForItem(pmcData, inventoryItem);
             const groupByTraderId = sellDecision.traderId;
-            const itemTax = (sellDecision.tax ?? 0);
-            // console.log(`[SELL DECISION] ${JSON.stringify(sellDesicion)}`);
-            // console.log(`[ITEM TAX] ${itemTax}`);
             const itemPrice = sellDecision.price; 
-            const sellProfit = Math.floor(itemPrice - itemTax);
-            const requestPrice = Math.floor(this.convertRoublesToTraderCurrency(itemPrice - itemTax, groupByTraderId)); // important. convert to target trader currency and floor it.
+            const itemTax = (sellDecision.tax ?? 0);
+            const profit = itemPrice - itemTax;
+            const profitInRoubles = sellDecision.priceInRoubles - itemTax;
+            // const requestPrice = itemPrice - itemTax;
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
@@ -510,14 +499,15 @@ class BrokerPriceManager
                     traderName: this._tradersMetaData[groupByTraderId].name,
                     totalPrice: itemPrice,
                     totalTax: itemTax,
-                    totalProfit: sellProfit,
+                    totalProfit: profit,
+                    totalProfitInRoubles: profitInRoubles,
                     totalItemCount: 1,
                     totalStackObjectsCount: itemStackObjectsCount,
                     fullItemCount: fullItemCount,
                     requestBody: {
                         Action: sellData.Action,
                         items: [currItem],
-                        price: requestPrice, // important, subtract the tax to properly calculate profit
+                        price: profit,
                         tid: groupByTraderId,
                         type: sellData.type
                     }
@@ -528,13 +518,14 @@ class BrokerPriceManager
                 // Updating existing group
                 accum[groupByTraderId].totalPrice += itemPrice;
                 accum[groupByTraderId].totalTax += itemTax;
-                accum[groupByTraderId].totalProfit += sellProfit;
+                accum[groupByTraderId].totalProfit += profit;
+                accum[groupByTraderId].totalProfitInRoubles += profitInRoubles;
                 accum[groupByTraderId].totalItemCount += 1;
                 accum[groupByTraderId].totalStackObjectsCount += itemStackObjectsCount;
                 accum[groupByTraderId].fullItemCount += fullItemCount;
 
                 accum[groupByTraderId].requestBody.items.push(currItem);
-                accum[groupByTraderId].requestBody.price += requestPrice; // important, subtract the tax to properly calculate profit
+                accum[groupByTraderId].requestBody.price += profit; // important, subtract the tax to properly calculate profit
             }
             return accum;
         }, {} as ProcessedSellData);
@@ -562,13 +553,22 @@ class BrokerPriceManager
         const traderMeta = this._tradersMetaData[traderId];
         if (traderMeta == undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
 
-        let price = this.getBuyoutPriceForAllItems(pmcData, item, traderId === Traders.FENCE);
+        let price = this.getBuyoutPriceForAllItems(pmcData, item, 0, traderId === Traders.FENCE);
         price = price * (1 - traderMeta.buyPriceCoef/100); // apply trader price modifier
         return price;
     }
 
+    /**
+     * Calculates buyout price for item and it's children. (Sort of an item's worth.)
+     * @param pmcData PMC to whom the item belongs.
+     * @param item Item
+     * @param itemCount Item Count. If passed 0 - uses item StackObjectsCount.
+     * @param isFence Are you calculating for Fence? (Do you wan't to ignore buyout(min durability/resource) restrictions.)
+     * @param basePriceSrc Source for the base price. By default and pretty much everywhere in client's source code - handbook price.
+     * @returns number
+     */
     // Refernce - "GClass1969.CalculateBasePriceForAllItems"
-    public getBuyoutPriceForAllItems(pmcData: IPmcData, item: Item, isFence: boolean, basePriceSrc?: Record<string, number>): number
+    public getBuyoutPriceForAllItems(pmcData: IPmcData, item: Item, itemCount: number, isFence: boolean, basePriceSrc?: Record<string, number>): number
     {
         let price = 0;
         
@@ -576,9 +576,10 @@ class BrokerPriceManager
         // but no need for it, since it's checked clientside.
 
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
+        //console.log(`[BUYOUT] BASE ITEM IS AMONG CHILDREN ARRAY ${itemAndChildren.find(itc => itc._id === item._id) != undefined}`)
         for (const itemIter of itemAndChildren)
         {
-            const priceIter = this.getBuyoutPriceForSingleItem(itemIter, isFence, basePriceSrc);
+            const priceIter = this.getBuyoutPriceForSingleItem(itemIter, (itemIter._id === item._id) ? itemCount : 0, isFence, basePriceSrc);
             if (priceIter === 0) return 0;
             price += priceIter;
         }
@@ -586,9 +587,11 @@ class BrokerPriceManager
     }
 
     // Reference - "GClass1969.CalculateBuyoutBasePriceForSingleItem()" and "GClass1969.smethod_0()"
-    public getBuyoutPriceForSingleItem(item: Item, isFence: boolean, basePriceSrc?: Record<string, number>): number
+    public getBuyoutPriceForSingleItem(item: Item, itemCount: number, isFence: boolean, basePriceSrc?: Record<string, number>): number
     {
         if (!this.passesBuyoutRestrictions(item, isFence)) return 0;
+
+        if (itemCount < 1) itemCount = this.getItemStackObjectsCount(item);
 
         let price: number;
 
@@ -627,7 +630,8 @@ class BrokerPriceManager
         {
             // "Points" is NumberOfUsages
             component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.KEY);
-            price = price / component.templateMaxPoints * (component.templateMaxPoints - component.points);
+            // Important! Use Math.max to avoid dividing by 0, when point, maxpoints, templatemaxpoints in component equal 1.
+            price = price / Math.max(component.templateMaxPoints * (component.templateMaxPoints - component.points), 1);
         }
         if (this.componentHelper.hasComponent(item, ItemComponentTypes.RESOURCE))
         {
@@ -659,9 +663,8 @@ class BrokerPriceManager
             component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.REPAIRKIT);
             price = price / component.maxPoints * Math.max(component.points, 1);
         }
-        return price * this.getItemStackObjectsCount(item);
+        return price * itemCount;
     }
-
 
     // Reference - GClass1969.CalculateBuyoutBasePriceForSingleItem() (the restriction checking part)
     public passesBuyoutRestrictions(item: Item, isFence: boolean): boolean
@@ -686,15 +689,6 @@ class BrokerPriceManager
         return true;
     }
 
-
-    // public getItemTraderPrice(item: Item, traderId: string, pmcData: IPmcData): number
-    // {
-    //     const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
-    //     // console.log(`[itemAndChildren] ${JSON.stringify(itemAndChildren)}`);
-    //     return itemAndChildren.reduce((accum, curr) => accum + this.getSingleItemTraderPrice(curr, traderId), 0);
-    // }
-
-
     public isMissingVitalParts(item: Item): boolean
     {
         return this.getMissingVitalPartsCount(item) > 0;
@@ -714,7 +708,7 @@ class BrokerPriceManager
     }
 
     /**
-     * Gets ragfair avg and perPoint price for template, accesses the cached price table.
+     * Gets ragfair average price for template, accesses the cached price table.
      * @param itemTplId Item Template Id.
      * @returns ItemRagFairCosts - flea tax and average flea price.
      */
@@ -871,6 +865,7 @@ interface SellDecision
     // trader: TraderBaseData; unnecessary
     traderId: string;
     price: number;
+    priceInRoubles: number;
     tax?: number;
 }
 interface TraderMetaData
@@ -902,6 +897,7 @@ interface ProcessedSellData
         totalPrice: number;
         totalTax: number;
         totalProfit: number;
+        totalProfitInRoubles: number;
         totalItemCount: number;
         totalStackObjectsCount: number;
         fullItemCount: number;

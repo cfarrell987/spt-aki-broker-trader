@@ -171,5 +171,21 @@ namespace PricePatch
         }
     }
 
+    //  WIP. Send accurate client item data to server.
+    public class PatchConfirmSell : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod()
+        {
+            // Might be NonPublic, unknown. If won't work, try TraderAssortmentControllerClass method Sell().
+            return typeof(TraderAssortmentControllerClass).GetMethod("Sell", BindingFlags.Instance | BindingFlags.Public);
+        }
+
+        [PatchPostfix]
+        private static void PatchPostfix(TraderAssortmentControllerClass __instance)
+        {
+            var trader = __instance.GetType().GetField("gclass1949_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TraderClass;
+            Logger.LogMessage($"Confirming sell to trader {trader.LocalizedName}");
+        }
+    }
 
 }
