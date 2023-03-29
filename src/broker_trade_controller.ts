@@ -6,7 +6,6 @@ import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
 import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
 import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
 import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
-import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBuyTradeRequestData";
 import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
 import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
 import { ILogger } from "@spt-aki/models/spt/utils/ILogger";

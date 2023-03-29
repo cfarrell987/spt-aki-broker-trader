@@ -18,7 +18,7 @@ import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
 import modConfig from "../config/config.json";
-import { IGlobals, IItemEnhancementSettings, IPriceModifier } from "@spt-aki/models/eft/common/IGlobals";
+import { IGlobals, IPriceModifier } from "@spt-aki/models/eft/common/IGlobals";
 
 import * as fs from "fs";
 import * as path from "path";
@@ -28,8 +28,6 @@ import { Money } from "@spt-aki/models/enums/Money";
 import { PresetHelper } from "@spt-aki/helpers/PresetHelper";
 import { RagfairController } from "@spt-aki/controllers/RagfairController";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
-import { ISearchRequestData, OfferOwnerType } from "@spt-aki/models/eft/ragfair/ISearchRequestData";
-import { RagfairSort } from "@spt-aki/models/enums/RagfairSort";
 import { ItemComponentHelper, ItemComponentTypes, ItemPointsData } from "./item_component_helper";
 
 interface BrokerPriceManagerCache
