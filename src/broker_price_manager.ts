@@ -759,7 +759,7 @@ class BrokerPriceManager
      */
     private getItemTemplateRagfairPrice(itemTplId: string): number
     {
-        // Collect offers with at least 85% durability/resource (if item has no points properties - its valid) and no sellInOnePiece
+        // Collect offers with at least 85% durability/resource (if item has no points properties - its valid)
 
         // sellInOnePiece check is not needed - I'll leave this as a reminder for my goofy aah
         // took me 3 hours to realize that I checked for sellInOnePiece === false and couldn't get
@@ -775,7 +775,8 @@ class BrokerPriceManager
                 offer.user?.memberType === MemberCategory.TRADER || // no trader offers
                 offer.items.length < 1 || // additional reliability measure
                 offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
-                this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 // no "not operational" offers 
+                modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 || // only "operational" offers if config specifies
+                !modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length > 1 // only "not operational" offers if config specifies
             ) return false;    
             const pointsData = this.componentHelper.getRagfairItemComponentPoints(firstItem);
             const originalMaxPtsBoundary = pointsData.templateMaxPoints * 0.85; // 85% of max capacity
