@@ -14,6 +14,7 @@ using Aki.Common.Utils;
 using static BrokerTraderPlugin.PriceManager;
 using TMPro;
 using System.Text.RegularExpressions;
+using Comfort.Common;
 
 namespace BrokerPatch
 {
@@ -26,11 +27,11 @@ namespace BrokerPatch
         }
 
         [PatchPostfix]
-        private static void PatchPostfix(IEnumerable<TraderClass> tradersList)
+        private static void PatchPostfix(MerchantsList __instance, IEnumerable<TraderClass> tradersList)
         {
-            Logger.LogMessage($"[BROKER TRADER] Supported traders {PriceManager.SupportedTraderIds.Length}");
-            Logger.LogMessage($"[BROKER TRADER] Item ragfair price count {PriceManager.ItemRagfairPriceTable.Count}");
-            Logger.LogMessage($"[BROKER TRADER] Received {PriceManager.SupplyData.Count} SupplyData instances.");
+            //Logger.LogMessage($"[BROKER TRADER] Supported traders {PriceManager.SupportedTraderIds.Length}");
+            //Logger.LogMessage($"[BROKER TRADER] Item ragfair price count {PriceManager.ItemRagfairPriceTable.Count}");
+            //Logger.LogMessage($"[BROKER TRADER] Received {PriceManager.SupplyData.Count} SupplyData instances.");
             //Logger.LogMessage($"[BROKER TRADER] ITEM RAGFAIR TABLE.");
             //Logger.LogMessage($"{Json.Serialize(ItemRagfairPriceTable)}");
             //string response = RequestHandler.GetJson("/broker-trader/item-ragfair-price-table");
@@ -56,8 +57,10 @@ namespace BrokerPatch
 
             // Get supported TraderClass instancess to work with.
             // PriceManager static constructor will most likely init here, so expect requets
-            PriceManager.TradersList = tradersList.Where((trader) => PriceManager.SupportedTraderIds.Contains(trader.Id));
-            Logger.LogMessage($"[BROKER TRADER] PriceManager.TradersList count {PriceManager.TradersList.Count()}");
+            TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id));
+            Session = typeof(MerchantsList).GetField("ginterface128_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as ISession;
+            BackendCfg = Singleton<BackendConfigSettingsClass>.Instance;
+            //Logger.LogMessage($"[BROKER TRADER] PriceManager.TradersList count {PriceManager.TradersList.Count()}");
         }
     }
     //  Patch price calculation method in TraderClass
@@ -86,9 +89,9 @@ namespace BrokerPatch
                     //var bestPrice = GetBestTraderPrice(item);
                     //Logger.LogInfo($"TRADER {bestPrice.Trader.LocalizedName} ROUBLE AMOUNT {bestPrice.RoubleAmount}");
                     //Logger.LogInfo(Json.Serialize(GetBestSellItemPrice(item)));
-                    TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
-                    RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-                    Logger.LogMessage($"[BROKER PRICE] Trader: {Json.Serialize(traderPrice.Price)} Ragfair: {Json.Serialize(ragfairPrice)}");
+                    //TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
+                    //RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
+                    //Logger.LogMessage($"[BROKER PRICE] Trader: {Json.Serialize(traderPrice.Price)} Ragfair: {Json.Serialize(ragfairPrice)}");
                     __result = GetBestItemPrice(item);
                     //TraderClass bestTrader = PriceManager.TradersList.First();
                     //SellItemPrice? bestPrice = PriceManager.GetUserItemPriceInRoubles(bestTrader, item);

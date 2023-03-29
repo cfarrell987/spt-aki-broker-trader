@@ -5,6 +5,7 @@ import { DependencyContainer } from "tsyringe"
 import { BrokerPriceManager } from "./broker_price_manager"
 
 import modInfo from "../package.json";
+import modCfg from "../config/config.json";
 import { VerboseLogger } from "./verbose_logger";
 import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
 
@@ -31,6 +32,13 @@ export class BrokerTraderRouter
             "BrokerTraderRouter",
             [
                 {
+                    url: "/broker-trader/get/mod-config",
+                    action: (url, info, sessionId, output) =>
+                    {
+                        return this.respondGetModConfig();
+                    }
+                },
+                {
                     url: "/broker-trader/get/supported-trader-ids",
                     action: (url, info, sessionId, output) =>
                     {
@@ -45,11 +53,10 @@ export class BrokerTraderRouter
                     }
                 },
                 {
-                    // WIP. Use for receiving data from client.
                     url: "/broker-trader/post/sold-items-data",
                     action: (url, info, sessionId, output) =>
                     {
-                        console.log(`[BROKER] ${JSON.stringify(info)}`);
+                        //console.log(`[BROKER] ${JSON.stringify(info)}`);
                         return this.respondPostSoldItemsData(info);
                     }
                 }
@@ -58,19 +65,28 @@ export class BrokerTraderRouter
         )
     }
 
-    private static respondGetSupportedTraderIds(): string
+    private static respondGetModConfig(): IGetBodyResponseData<any>
     {
-        return this.http.noBody(Object.values(BrokerPriceManager.instance.supportedTraders));
-    }
-    
-    private static respondGetItemRagfairPriceTable(): string
-    {
-        return this.http.noBody(BrokerPriceManager.instance.itemRagfairPriceTable);
+        return this.http.getBody({
+            RagfairIgnoreAttachments: modCfg.ragfairIgnoreAttachments, 
+            RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
+            RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel 
+        });
     }
 
-    private static respondPostSoldItemsData(info: any): string
+    private static respondGetSupportedTraderIds(): IGetBodyResponseData<string[]>
+    {
+        return this.http.getBody<string[]>(Object.values(BrokerPriceManager.instance.supportedTraders));
+    }
+    
+    private static respondGetItemRagfairPriceTable(): IGetBodyResponseData<Record<string, number>>
+    {
+        return this.http.getBody<Record<string, number>>(BrokerPriceManager.instance.itemRagfairPriceTable);
+    }
+
+    private static respondPostSoldItemsData(info: any): IGetBodyResponseData<string>
     {
         BrokerPriceManager.instance.setClientBrokerPriceData(info);
-        return this.http.noBody("OK"); // Response is not really processed in the client in any way.
+        return this.http.emptyResponse(); // Response is not really processed in the client in any way.
     }
 }

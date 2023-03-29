@@ -116,7 +116,7 @@ class BrokerPriceManager
     public setClientBrokerPriceData(data: Record<string, BrokerSellData>): void
     {
         this._clientBrokerSellData = data;
-        console.log(`[SET BROKER DATA] ${JSON.stringify(this._clientBrokerSellData)}`);
+        //console.log(`[SET BROKER DATA] ${JSON.stringify(this._clientBrokerSellData)}`);
     }
 
     /**
@@ -354,7 +354,7 @@ class BrokerPriceManager
     {
         if (this._clientBrokerSellData[item._id] != undefined)
         {
-            console.log(`[BROKER] RECEIVED SELL DATA FROM CLIENT FOR ${item._id}`);
+            //console.log(`[BROKER] RECEIVED SELL DATA FROM CLIENT FOR ${item._id}`);
             const clientSellData = this._clientBrokerSellData[item._id];
             return {
                 traderId: clientSellData.TraderId,

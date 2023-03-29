@@ -15,6 +15,13 @@ using Comfort.Common;
 
 namespace BrokerTraderPlugin
 {
+    internal struct ModConfig
+    {
+        public bool RagfairIgnoreAttachments { get; set; }
+        public bool RagfairIgnoreFoundInRaid { get; set; }
+        public bool RagfairIgnorePlayerLevel { get; set; }
+    }
+
     [Serializable]
     internal struct ResponseBody<T>
     {
@@ -73,6 +80,9 @@ namespace BrokerTraderPlugin
     internal static class PriceManager
     {
         public const string BROKER_TRADER_ID = "broker-trader-id";
+        public static ISession Session { get; set; }
+        public static ModConfig ModConfig { get; set; }
+        public static BackendConfigSettingsClass BackendCfg { get; set; }
         public static readonly string[] SupportedTraderIds = new string[0];
         public static Dictionary<string, double> ItemRagfairPriceTable { get; set; } = new Dictionary<string, double>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
@@ -80,23 +90,31 @@ namespace BrokerTraderPlugin
         // Requests in a static constructor will be performed only once for initialization.
         static PriceManager()
         {
+            // Request config
+            string response = RequestHandler.GetJson("/broker-trader/get/mod-config");
+            var modCfgBody = Json.Deserialize<ResponseBody<ModConfig>>(response);
+            ThrowIfErrorResponseBody(modCfgBody, $"[BROKER TRADER] Couldn't get Mod Config!");
+            ModConfig = modCfgBody.Data;
+
             // Request supported trader ids
-            string response = RequestHandler.GetJson("/broker-trader/get/supported-trader-ids");
-            ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get SupportedTraderIds!");
-            SupportedTraderIds = Json.Deserialize<string[]>(response);
+            response = RequestHandler.GetJson("/broker-trader/get/supported-trader-ids");
+            var supportedTradersBody = Json.Deserialize<ResponseBody<string[]>>(response);
+            ThrowIfErrorResponseBody(supportedTradersBody, $"[BROKER TRADER] Couldn't get SupportedTraderIds!");
+            SupportedTraderIds = supportedTradersBody.Data;
 
             // Request ragfair item price table.
             response = RequestHandler.GetJson("/broker-trader/get/item-ragfair-price-table");
-            ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
-            ItemRagfairPriceTable = Json.Deserialize<Dictionary<string, double>>(response);
+            var ragfairTableBody = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
+            ThrowIfErrorResponseBody(ragfairTableBody, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
+            ItemRagfairPriceTable = ragfairTableBody.Data;
 
             // Request SupplyData from default SPT-AKI server route
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
             foreach (string traderId in SupportedTraderIds)
             {
                 response = RequestHandler.GetJson($"/client/items/prices/{traderId}");
-                ThrowIfNullResponse(response, $"[BROKER TRADER] Couldn't get prices for traderId {traderId}");
                 ResponseBody<SupplyData> body = Json.Deserialize<ResponseBody<SupplyData>>(response);
+                ThrowIfErrorResponseBody(body, $"[BROKER TRADER] Couldn't get prices for traderId {traderId}");
                 SupplyData.Add(traderId, body.Data);
             }
         }
@@ -147,9 +165,43 @@ namespace BrokerTraderPlugin
             }
             return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, Convert.ToInt32(Math.Floor(amount)))), amountInRoubles); ;
         }
+
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
         {
-            if (!item.CanSellOnRagfairRaidRelated || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return new RagfairItemPriceData(-1, -1, null);
+            if (item.IsContainer && item.GetAllItems().Count() > 1)
+            {
+                return new RagfairItemPriceData(-1, -1, null);
+            }
+            double requirementsPrice = 0.0;
+
+            if (ModConfig.RagfairIgnoreAttachments)
+            {
+                requirementsPrice = GetSingleRagfairItemPriceData(item);
+                if (requirementsPrice < 1) return new RagfairItemPriceData(-1, -1, null);
+            }
+            else
+            {
+                foreach (var itemIter in item.GetAllItems())
+                {
+                    double priceIter = GetSingleRagfairItemPriceData(itemIter);
+                    if (priceIter < 1) return new RagfairItemPriceData(-1, -1, null);
+                    requirementsPrice += priceIter;
+                }
+            }
+
+            // !IMPORTANT Round the tax
+            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
+            // !IMPORTANT Floor the price
+            int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
+            return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
+        }
+
+        public static double GetSingleRagfairItemPriceData(Item item)
+        {
+            //if (!isFoundInRaid(item) || !isRagfairUnlocked() || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return new RagfairItemPriceData(-1, -1, null);
+            // !ItemRagfairPriceTable.ContainsKey(item.TemplateId) - checks if item not blacklisted.
+            // Should be correct since the look-up table provided by the server contains only non-blacklisted items.
+            if (!isFoundInRaid(item) || !isRagfairUnlocked() || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return -1;
 
             // Basically base price(avg flea price)
             // Will be overwritten.
@@ -220,61 +272,43 @@ namespace BrokerTraderPlugin
             }
             requirementsPrice *= item.StackObjectsCount;
             // !IMPORTANT Round the tax
-            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
+            //int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
             // !IMPORTANT Floor the price
-            int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
-            return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
+            //int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
+            //return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
+            return requirementsPrice;
         }
         public static ItemPrice? GetBestItemPrice(Item item)
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            if (traderPrice.Price != null && ragfairPrice.Price != null)
-            {
-                return ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles ? ragfairPrice.Price : traderPrice.Price;
-            }
-            else
-            {
-                if (traderPrice.Price != null && ragfairPrice.Price == null)
-                {
-                    return traderPrice.Price;
-                }
-                else if (ragfairPrice.Price != null && traderPrice.Price == null)
-                {
-                    return ragfairPrice.Price;
-                }
-            }
-            // as fallback return trader price
-            return traderPrice.Price;
+            return ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+                ? ragfairPrice.Price
+                : traderPrice.Price;
         }
-        // Looks messy as fuck, but whatever. Maybe going through Tarkov's source code has affected me.
         public static BrokerItemSellData GetBrokerItemSellData(Item item)
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            if (traderPrice.Price != null && ragfairPrice.Price != null)
-            {
-                return ragfairPrice.RequirementsAmount > traderPrice.AmountInRoubles
-                    ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax)
-                    : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
-            }
-            else
-            {
-                if (traderPrice.Price != null && ragfairPrice.Price == null)
-                {
-                    return new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
-                }
-                else if (ragfairPrice.Price != null && traderPrice.Price == null)
-                {
-                    return new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax);
-                }
-            }
-            // as fallback return trader price
-            return new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
+            return ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+                ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax)
+                : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
         }
-        private static void ThrowIfNullResponse(string response, string message)
+
+        private static bool isFoundInRaid(Item item)
         {
-            if (response == null || response == "")
+            // item.MarkedAsSpawnedInSession also can be used, they return the same property anyway.
+            return item.CanSellOnRagfairRaidRelated || ModConfig.RagfairIgnoreFoundInRaid;
+        }
+        private static bool isRagfairUnlocked()
+        {
+            if (Session?.Profile?.Info.Level == null) return false;
+            return Session.Profile.Info.Level >= BackendCfg.RagFair.minUserLevel;
+        }
+
+        private static void ThrowIfErrorResponseBody<T>(ResponseBody<T> body, string message)
+        {
+            if (body.Error != 0)
             {
                 Debug.LogError(message);
                 throw (new Exception(message));
