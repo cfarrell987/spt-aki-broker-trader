@@ -6,5 +6,5 @@
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
-    "useCache": false
+    "useCache": true
 }
