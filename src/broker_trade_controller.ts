@@ -104,7 +104,8 @@ export class BrokerTradeController extends TradeController
                         {
                             // Use total price, since the tax doesn't count towards flea rep.
                             // You get 0.01 rep per 50 000 RUB sold. 
-                            const ratingIncrease = tReqData.totalPrice * 0.01 / 50000
+                            const repGain = this.ragfairConfig.sell.reputation.gain;
+                            const ratingIncrease = tReqData.totalPrice * repGain;
                             pmcData.RagfairInfo.isRatingGrowing = true;
                             pmcData.RagfairInfo.rating += ratingIncrease;
                             verboseLogger.explicitSuccess(

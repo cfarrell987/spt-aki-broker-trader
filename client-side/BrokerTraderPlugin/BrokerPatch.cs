@@ -9,6 +9,8 @@ using Aki.Common.Http;
 
 using ItemPrice = TraderClass.GStruct219;
 using CurrencyHelper = GClass2179;
+using PriceHelper = GClass1969;
+
 using Aki.Common.Utils;
 
 using static BrokerTraderPlugin.PriceManager;
@@ -124,7 +126,7 @@ namespace BrokerPatch
         }
     }
     //  Change how total transaction sum is generated when selling to trader.
-    public class PatchTraderDealScreen : ModulePatch
+    public class PatchEquivalentSum : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
         {
@@ -161,8 +163,27 @@ namespace BrokerPatch
             _equivalentSumValue.text = regex.Replace(_equivalentSumValue.text, " ");
         }
     }
+    //  Before showing the trader screen refresh ragfair prices. This fixes price inconsistency if you didn't open ragfair menu yet.
+    public class PatchRefreshRagfairOnTraderScreenShow : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod()
+        {
+            // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
+            return typeof(TraderDealScreen).GetMethod("Show", BindingFlags.Instance | BindingFlags.Public);
+        }
+
+        [PatchPrefix]
+        private static void PatchPrefix(TraderClass trader)
+        {
+            if (trader.Id == BROKER_TRADER_ID && PriceManager.ModConfig.UseRagfair)
+            {
+                //Logger.LogMessage($"Ragfair status {Session.RagFair.Status}");
+                Session.RagFair.RefreshItemPrices();
+            }
+        }
+    }
     //  Send accurate client item data to server when user pressed "DEAL!" on the trade screen.
-    public class PatchTraderAssortmentController : ModulePatch
+    public class PatchSendDataOnDealButtonPress : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
         {
@@ -170,7 +191,7 @@ namespace BrokerPatch
             return typeof(TraderAssortmentControllerClass).GetMethod("Sell", BindingFlags.Instance | BindingFlags.Public);
         }
 
-        // Prefer prefix patch to make sure that the request is 
+        // Prefer prefix patch to make sure that the request is sent in time. (Although it's probably sync)
         [PatchPrefix]
         private static void PatchPrefix(TraderAssortmentControllerClass __instance)
         {
@@ -180,6 +201,10 @@ namespace BrokerPatch
                 // Both are probably be identical, but use lower for consistency with source code.
                 // var soldItems = __instance.SellingStash.Containers.First().Items; 
                 var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList();
+                //foreach(var soldItem in soldItems)
+                //{
+                //    Logger.LogMessage($"{soldItem.LocalizedName()} tax: {PriceHelper.CalculateTaxPrice(soldItem, soldItem.StackObjectsCount, GetBrokerItemSellData(soldItem).PriceInRoubles, true)}");
+                //}
                 if(soldItems.Count > 0)
                 {
                     Dictionary<string, BrokerItemSellData> sellData = soldItems.Select(GetBrokerItemSellData).ToDictionary(data => data.ItemId);

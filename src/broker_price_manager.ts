@@ -129,14 +129,15 @@ class BrokerPriceManager
         const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
         const cacheFullPath = path.normalize(path.resolve(`${__dirname}/../cache/cache.json`));
         // console.log(cacheFullPath);
-        if (fs.existsSync(cacheFullPath))
+        if (fs.existsSync(cacheFullPath) && modConfig.useCache)
         {
             this.tryToLoadCache(cacheFullPath);
         }
         else 
         {
             this.generateLookUpTables();
-            this.tryToSaveCache(cacheDir, cacheFullPath);         
+            if (modConfig.useCache)
+                this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
     } 
 
@@ -374,13 +375,13 @@ class BrokerPriceManager
         // console.log("PARAMS:",item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true);
 
         // Tarkov price logic is simple - Math.Floor profits, Math.Ceil losses.
-        if (ragfairPrice > traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
+        if (modConfig.useRagfair && ragfairPrice >= traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
         {
             return {
                 traderId: BrokerPriceManager.brokerTraderId,
-                price: Math.floor(ragfairPrice),
-                priceInRoubles: Math.floor(ragfairPrice),
-                tax: Math.ceil(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
+                price: Math.ceil(ragfairPrice),
+                priceInRoubles: Math.ceil(ragfairPrice),
+                tax: Math.round(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
             };
         }
         return {
@@ -813,12 +814,13 @@ class BrokerPriceManager
 
     public getSingleItemRagfairPrice(item: Item): number
     {
+        if (!modConfig.useRagfair) return 0;
         const pointsData = this.componentHelper.getRagfairItemComponentPoints(item);
         // Round, since weapon or armor durability can be float, etc.
         // console.log(`[POINTS DATA] ${JSON.stringify(pointsData)}`);
         // console.log(`[RAGFAIR PRICE DATA] ${JSON.stringify(this.getItemTplRagfairPrice(item._tpl))}`);
         // console.log(`[GET STACK OBJECT COUNT DATA] ${JSON.stringify(this.getItemStackObjectsCount(item))}`);
-        return Math.floor(pointsData.points * this.getItemTplRagfairPrice(item._tpl) / pointsData.templateMaxPoints) * this.getItemStackObjectsCount(item);
+        return this.getItemTplRagfairPrice(item._tpl) * pointsData.points / pointsData.templateMaxPoints * this.getItemStackObjectsCount(item);
     }
 
     public getItemRagfairPrice(item: Item, pmcData: IPmcData): number

@@ -2,8 +2,9 @@
     "logger": {
         "verbose": false
     },
+    "useRagfair": true,
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
-    "useCache": true
+    "useCache": false
 }

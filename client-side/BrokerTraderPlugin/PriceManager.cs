@@ -17,6 +17,7 @@ namespace BrokerTraderPlugin
 {
     internal struct ModConfig
     {
+        public bool UseRagfair { get; set; }
         public bool RagfairIgnoreAttachments { get; set; }
         public bool RagfairIgnoreFoundInRaid { get; set; }
         public bool RagfairIgnorePlayerLevel { get; set; }
@@ -168,6 +169,11 @@ namespace BrokerTraderPlugin
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
         {
+            if(!ModConfig.UseRagfair)
+            {
+                return new RagfairItemPriceData(-1, -1, null);
+            }
+
             if (item.IsContainer && item.GetAllItems().Count() > 1)
             {
                 return new RagfairItemPriceData(-1, -1, null);
@@ -189,10 +195,14 @@ namespace BrokerTraderPlugin
                 }
             }
 
-            // !IMPORTANT Round the tax
-            int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
-            // !IMPORTANT Floor the price
-            int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
+            // !IMPORTANT Ceil the price. Reference -> AddOfferWindow.method_3().
+            // Before passing offer requirements amount into CalculateTaxPrice its always Ceiled.
+            int amount = Convert.ToInt32(Math.Ceiling(requirementsPrice));
+            // !IMPORTANT Use Mathf.RoundToInt for the tax. Helps with Infinity occurences.
+            // The tax displayed on AddOfferWindow seems to be rounded due to calling FormatSeparate()
+            int tax = Mathf.RoundToInt((float)PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, amount, true));
+
+
             return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
         }
 
@@ -282,7 +292,10 @@ namespace BrokerTraderPlugin
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            return ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+            // For now leave the "useRagfair" here so if any integral issues are present
+            // they will be detected since both the code for trader and ragfair pricing will run.
+            // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
+            return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
                 ? ragfairPrice.Price
                 : traderPrice.Price;
         }
@@ -290,7 +303,10 @@ namespace BrokerTraderPlugin
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            return ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+            // For now leave the "useRagfair" here so if any integral issues are present
+            // they will be detected since both the code for trader and ragfair pricing will run.
+            // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
+            return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
                 ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax)
                 : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
         }
@@ -302,8 +318,8 @@ namespace BrokerTraderPlugin
         }
         private static bool isRagfairUnlocked()
         {
-            if (Session?.Profile?.Info.Level == null) return false;
-            return Session.Profile.Info.Level >= BackendCfg.RagFair.minUserLevel;
+            if (Session?.RagFair?.Available == null) return false;
+            return Session.RagFair.Available;
         }
 
         private static void ThrowIfErrorResponseBody<T>(ResponseBody<T> body, string message)

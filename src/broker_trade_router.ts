@@ -68,6 +68,7 @@ export class BrokerTraderRouter
     private static respondGetModConfig(): IGetBodyResponseData<any>
     {
         return this.http.getBody({
+            UseRagfair: modCfg.useRagfair,
             RagfairIgnoreAttachments: modCfg.ragfairIgnoreAttachments, 
             RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
             RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel 

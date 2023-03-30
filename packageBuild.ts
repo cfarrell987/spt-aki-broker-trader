@@ -49,7 +49,8 @@ const ignoreList = [
     "README.md",
     "Readme.docx",
     "portrait_options/",
-    "client-side/"
+    "client-side/",
+    "dist/"
 ];
 const exclude = glob.sync(`{${ignoreList.join(",")}}`, { realpath: true, dot: true });
 
