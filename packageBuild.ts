@@ -2,6 +2,9 @@
 
 // SPT-AKI mods folder path
 const sptAkiMods = "D:/SPT-AKI/SPTARKOV 3.5.3/user/mods";
+const sptAkiBepinex = "D:/SPT-AKI/SPTARKOV 3.5.3/BepInEx/plugins";
+const pluginPath = "client-side/BrokerTraderPlugin/bin/Debug/net472";
+const pluginName = "BrokerTraderPlugin.dll";
 
 // This is a simple script used to build a mod package. The script will copy necessary files to the build directory
 // and compress the build directory into a zip file that can be easily shared.
@@ -50,7 +53,8 @@ const ignoreList = [
     "Readme.docx",
     "portrait_options/",
     "client-side/",
-    "dist/"
+    "dist/",
+    "dist_zip/"
 ];
 const exclude = glob.sync(`{${ignoreList.join(",")}}`, { realpath: true, dot: true });
 
@@ -61,19 +65,32 @@ fs.copySync(__dirname, path.normalize(`${__dirname}/../~${modName}`), {filter:(f
     return !exclude.includes(filePath);
 }});
 fs.moveSync(path.normalize(`${__dirname}/../~${modName}`), path.normalize(`${__dirname}/${modName}`), { overwrite: true });
-fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${__dirname}/dist`));
+
+// Copy into a different structure.
+fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${__dirname}/dist/user/mods/${modName}`));
+fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginName}`), path.normalize(`${__dirname}/dist/BepInEx/plugins/${pluginName}`));
+
+//fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${__dirname}/dist/user/mods/${modName}`));
 
 // My personal preference to copy a ready to test version to the mods folder of SPT-AKI
 fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${sptAkiMods}/${modName}`));
+fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginName}`), path.normalize(`${sptAkiBepinex}/${pluginName}`));
 
 console.log("Build files copied.");
 
 // Compress the files for easy distribution. The compressed file is saved into the dist directory. When uncompressed we
 // need to be sure that it includes a directory that the user can easily copy into their game mods directory.
+if (!fs.existsSync(path.normalize(`${__dirname}/dist_zip`)))
+{
+    fs.mkdirSync(path.normalize(`${__dirname}/dist_zip`));
+}
+
+console.log(__dirname+"\\dist")
+
 zip({
-    source: modName,
-    destination: `dist/${modName}.zip`,
-    cwd: __dirname
+    source: "*",
+    destination: `../dist_zip/${modName}.zip`,
+    cwd: `${__dirname}/dist`
 }).catch(function(err)
 {
     console.error("A bestzip error has occurred: ", err.stack);
