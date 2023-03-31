@@ -1,10 +1,10 @@
 {
     "name": "broker_trader",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "main": "src/mod.js",
     "license": "NCSA",
     "author": "Nightingale",
-    "akiVersion": "~3.5",
+    "akiVersion": "~3.5.3",
     "scripts": {
         "setup": "npm i",
         "build": "node ./packageBuild.ts"
