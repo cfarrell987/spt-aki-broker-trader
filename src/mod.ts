@@ -17,6 +17,7 @@ import { TradeController } from "@spt-aki/controllers/TradeController";
 
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
+import modCfg from "../config/config.json";
 import { BrokerTradeController } from "./broker_trade_controller";
 import { VerboseLogger } from "./verbose_logger";
 import { BrokerPriceManager } from "./broker_price_manager";
@@ -47,6 +48,12 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         BrokerTrader.container = container;
         this.logger = new VerboseLogger(container);
         this.logger.explicitInfo(`[${this.mod}] preAki Loading... `);
+
+        if (modCfg.profitCommissionPercentage < 0 || modCfg.profitCommissionPercentage > 99)
+        {
+            this.logger.explicitError(`[${this.mod}] Config error! "profitCommissionPercentage": ${modCfg.profitCommissionPercentage}, must have a value not less than 0 and not more than 99.`)
+            throw (`${this.mod} Config error. "profitCommissionPercentage" out of range [0-99]`);
+        }
 
         const preAkiModLoader: PreAkiModLoader = container.resolve<PreAkiModLoader>("PreAkiModLoader");
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");

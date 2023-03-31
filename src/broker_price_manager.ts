@@ -386,8 +386,8 @@ class BrokerPriceManager
                 traderId: BrokerPriceManager.brokerTraderId,
                 price: Math.ceil(ragfairPrice),
                 priceInRoubles: Math.ceil(ragfairPrice),
-                commission: Math.round(ragfairPrice * modConfig.profitComissionPercentage / 100),
-                commissionInRoubles: Math.round(ragfairPrice * modConfig.profitComissionPercentage / 100),
+                commission: Math.round(ragfairPrice * modConfig.profitCommissionPercentage / 100),
+                commissionInRoubles: Math.round(ragfairPrice * modConfig.profitCommissionPercentage / 100),
                 tax: Math.round(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
             };
         }
@@ -395,8 +395,8 @@ class BrokerPriceManager
             traderId: bestTrader.id,
             price: Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)),
             priceInRoubles: Math.floor(traderPrice),
-            commission: Math.round(Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)) * modConfig.profitComissionPercentage / 100),
-            commissionInRoubles: Math.round(Math.floor(traderPrice) * modConfig.profitComissionPercentage / 100)
+            commission: Math.round(Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)) * modConfig.profitCommissionPercentage / 100),
+            commissionInRoubles: Math.round(Math.floor(traderPrice) * modConfig.profitCommissionPercentage / 100)
         };
     }
 

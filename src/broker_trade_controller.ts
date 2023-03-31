@@ -90,7 +90,7 @@ export class BrokerTradeController extends TradeController
                             `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
                             `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
                             `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB).`;
-                            if (modConfig.profitComissionPercentage > 0)
+                            if (modConfig.profitCommissionPercentage > 0)
                             {
                                 profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB.`;
                             }
@@ -106,7 +106,7 @@ export class BrokerTradeController extends TradeController
                                 profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)})`;
                             }
                             profitMsg += ".";
-                            if (modConfig.profitComissionPercentage > 0)
+                            if (modConfig.profitCommissionPercentage > 0)
                             {
                                 profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB`;
                                 if (tCurrency !== "RUB")
