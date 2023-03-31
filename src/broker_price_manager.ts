@@ -43,6 +43,8 @@ interface BrokerSellData
     TraderId: string;
     Price: number;
     PriceInRoubles: number;
+    Commission: number;
+    CommissionInRoubles: number;
     Tax: number;
 }
 
@@ -343,6 +345,7 @@ class BrokerPriceManager
     }
 
     /**
+     * Main method which processes each item and provides a decision.
      * Get the most profitable sell decision for an item. 
      * Selects between selling to most profitable trader or ragfair.
      * @param pmcData PMC to whom item belongs.
@@ -359,6 +362,8 @@ class BrokerPriceManager
                 traderId: clientSellData.TraderId,
                 price: clientSellData.Price,
                 priceInRoubles: clientSellData.PriceInRoubles,
+                commission: clientSellData.Commission,
+                commissionInRoubles: clientSellData.CommissionInRoubles,
                 tax: clientSellData.Tax
             };
         }
@@ -381,13 +386,17 @@ class BrokerPriceManager
                 traderId: BrokerPriceManager.brokerTraderId,
                 price: Math.ceil(ragfairPrice),
                 priceInRoubles: Math.ceil(ragfairPrice),
+                commission: Math.round(ragfairPrice * modConfig.profitComissionPercentage / 100),
+                commissionInRoubles: Math.round(ragfairPrice * modConfig.profitComissionPercentage / 100),
                 tax: Math.round(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
             };
         }
         return {
             traderId: bestTrader.id,
             price: Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)),
-            priceInRoubles: Math.floor(traderPrice)
+            priceInRoubles: Math.floor(traderPrice),
+            commission: Math.round(Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)) * modConfig.profitComissionPercentage / 100),
+            commissionInRoubles: Math.round(Math.floor(traderPrice) * modConfig.profitComissionPercentage / 100)
         };
     }
 
@@ -513,8 +522,10 @@ class BrokerPriceManager
             const groupByTraderId = sellDecision.traderId;
             const itemPrice = sellDecision.price; 
             const itemTax = (sellDecision.tax ?? 0);
-            const profit = itemPrice - itemTax;
-            const profitInRoubles = sellDecision.priceInRoubles - itemTax;
+            const commission = sellDecision.commission;
+            const commissionInRoubles = sellDecision.commissionInRoubles;
+            const profit = itemPrice - itemTax - commission;
+            const profitInRoubles = sellDecision.priceInRoubles - itemTax - commissionInRoubles;
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
@@ -528,6 +539,8 @@ class BrokerPriceManager
                     totalTax: itemTax,
                     totalProfit: profit,
                     totalProfitInRoubles: profitInRoubles,
+                    commission: commission,
+                    commissionInRoubles: commissionInRoubles,
                     totalItemCount: 1,
                     totalStackObjectsCount: itemStackObjectsCount,
                     fullItemCount: fullItemCount,
@@ -547,6 +560,8 @@ class BrokerPriceManager
                 accum[groupByTraderId].totalTax += itemTax;
                 accum[groupByTraderId].totalProfit += profit;
                 accum[groupByTraderId].totalProfitInRoubles += profitInRoubles;
+                accum[groupByTraderId].commission += commission;
+                accum[groupByTraderId].commissionInRoubles += commissionInRoubles;
                 accum[groupByTraderId].totalItemCount += 1;
                 accum[groupByTraderId].totalStackObjectsCount += itemStackObjectsCount;
                 accum[groupByTraderId].fullItemCount += fullItemCount;
@@ -895,6 +910,8 @@ interface SellDecision
     traderId: string;
     price: number;
     priceInRoubles: number;
+    commission: number;
+    commissionInRoubles: number;
     tax?: number;
 }
 interface TraderMetaData
@@ -927,6 +944,8 @@ interface ProcessedSellData
         totalTax: number;
         totalProfit: number;
         totalProfitInRoubles: number;
+        commission: number;
+        commissionInRoubles: number;
         totalItemCount: number;
         totalStackObjectsCount: number;
         fullItemCount: number;

@@ -17,6 +17,7 @@ namespace BrokerTraderPlugin
 {
     internal struct ModConfig
     {
+        public float ProfitCommissionPercentage { get; set; }
         public bool UseRagfair { get; set; }
         public bool RagfairIgnoreAttachments { get; set; }
         public bool RagfairIgnoreFoundInRaid { get; set; }
@@ -38,25 +39,33 @@ namespace BrokerTraderPlugin
     {
         public readonly TraderClass Trader { get; }
         public readonly ItemPrice? Price { get; }
+        public readonly int Amount { get; }
         public readonly int AmountInRoubles { get; }
-        public TraderItemPriceData(TraderClass trader, ItemPrice? price, int amountInRoubles)
+        public readonly int Commission { get; }
+        public readonly int CommissionInRoubles { get; }
+        public TraderItemPriceData(TraderClass trader, ItemPrice? price, int amount = -1, int amountInRoubles = -1, int commission = 0, int commissionInRoubles = 0)
         {
             Trader = trader;
             Price = price;
+            Amount = amount;
             AmountInRoubles = amountInRoubles;
+            Commission = commission;
+            CommissionInRoubles = commissionInRoubles;
         }
     }
 
     internal readonly struct RagfairItemPriceData
     {
+        public readonly ItemPrice? Price { get; }
         public readonly int RequirementsAmount { get; }
         public readonly int Tax { get; }
-        public readonly ItemPrice? Price { get; }
-        public RagfairItemPriceData(int requirementsAmount, int tax, ItemPrice? price)
+        public readonly int Commission { get; }
+        public RagfairItemPriceData( ItemPrice? price, int requirementsAmount, int tax = 0, int commission = 0)
         {
+            Price= price; 
             RequirementsAmount = requirementsAmount;
-            Price = price;
             Tax = tax;
+            Commission = commission;
         }
     }
 
@@ -67,14 +76,17 @@ namespace BrokerTraderPlugin
         public int Price { get; set; }
         public int PriceInRoubles { get; set; }
         public int Tax { get; set; }
-
-        public BrokerItemSellData(string itemId, string traderId, int price, int priceInRoubles, int tax)
+        public int Commission { get; set; }
+        public int CommissionInRoubles { get; set; }
+        public BrokerItemSellData(string itemId, string traderId, int price, int priceInRoubles, int tax, int commission, int commissionInRoubles)
         {
             ItemId = itemId;
             TraderId = traderId;
             Price = price;
             PriceInRoubles = priceInRoubles;
             Tax = tax;
+            Commission = commission;
+            CommissionInRoubles = commissionInRoubles;
         }
     }
 
@@ -151,46 +163,51 @@ namespace BrokerTraderPlugin
             if (SupplyData[trader.Id] == null)
             {
                 Debug.LogError("supplyData is null");
-                return new TraderItemPriceData(trader, null, -1);
+                return new TraderItemPriceData(trader, null, -1, -1);
             }
-            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader, null, -1);
+            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader, null, -1, -1);
             string currencyId = CurrencyHelper.GetCurrencyId(trader.Settings.Currency);
             double amount = PriceHelper.CalculateBasePriceForAllItems(item, 0, SupplyData[trader.Id], trader.Settings.BuyerUp);
             int amountInRoubles = Convert.ToInt32(Math.Floor(trader.Info.ApplyPriceModifier(amount))); // save rouble price
+            int commissionInRoubles = Convert.ToInt32(Math.Round(amountInRoubles * ModConfig.ProfitCommissionPercentage / 100));
+
 
             amount /= SupplyData[trader.Id].CurrencyCourses[currencyId];
             amount = trader.Info.ApplyPriceModifier(amount);
+
+            int finalAmount = Convert.ToInt32(Math.Floor(amount));
+            int commission = Convert.ToInt32(Math.Round(finalAmount * ModConfig.ProfitCommissionPercentage / 100));
             if (amount.ApproxEquals(0.0))
             {
-                return new TraderItemPriceData(trader, null, -1);
+                return new TraderItemPriceData(trader, null, -1, -1);
             }
-            return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, Convert.ToInt32(Math.Floor(amount)))), amountInRoubles); ;
+            return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, finalAmount - commission)), finalAmount, amountInRoubles, commission, commissionInRoubles);
         }
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
         {
             if(!ModConfig.UseRagfair)
             {
-                return new RagfairItemPriceData(-1, -1, null);
+                return new RagfairItemPriceData(null, -1);
             }
 
             if (item.IsContainer && item.GetAllItems().Count() > 1)
             {
-                return new RagfairItemPriceData(-1, -1, null);
+                return new RagfairItemPriceData(null, -1);
             }
             double requirementsPrice = 0.0;
 
             if (ModConfig.RagfairIgnoreAttachments)
             {
                 requirementsPrice = GetSingleRagfairItemPriceData(item);
-                if (requirementsPrice < 1) return new RagfairItemPriceData(-1, -1, null);
+                if (requirementsPrice < 1) return new RagfairItemPriceData(null, -1);
             }
             else
             {
                 foreach (var itemIter in item.GetAllItems())
                 {
                     double priceIter = GetSingleRagfairItemPriceData(itemIter);
-                    if (priceIter < 1) return new RagfairItemPriceData(-1, -1, null);
+                    if (priceIter < 1) return new RagfairItemPriceData(null, -1);
                     requirementsPrice += priceIter;
                 }
             }
@@ -202,8 +219,10 @@ namespace BrokerTraderPlugin
             // The tax displayed on AddOfferWindow seems to be rounded due to calling FormatSeparate()
             int tax = Mathf.RoundToInt((float)PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, amount, true));
 
+            int commission = Convert.ToInt32(Math.Round(amount * ModConfig.ProfitCommissionPercentage / 100));
 
-            return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
+
+            return new RagfairItemPriceData(new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax - commission)), amount, tax, commission);
         }
 
         public static double GetSingleRagfairItemPriceData(Item item)
@@ -307,8 +326,8 @@ namespace BrokerTraderPlugin
             // they will be detected since both the code for trader and ragfair pricing will run.
             // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
             return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
-                ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax)
-                : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Price.GetValueOrDefault().Amount, traderPrice.AmountInRoubles, 0);
+                ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax, ragfairPrice.Commission, ragfairPrice.Commission)
+                : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Amount, traderPrice.AmountInRoubles, 0, traderPrice.Commission, traderPrice.CommissionInRoubles);
         }
 
         private static bool isFoundInRaid(Item item)

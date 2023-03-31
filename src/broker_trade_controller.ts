@@ -20,6 +20,8 @@ import {RagfairController} from "@spt-aki/controllers/RagfairController";
 
 import * as baseJson from "../db/base.json";
 import modInfo from "../package.json";
+import modConfig from "../config/config.json";
+
 import { RagfairSellHelper } from "@spt-aki/helpers/RagfairSellHelper";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { TProfileChanges, ProfileChange, Warning } from "@spt-aki/models/eft/itemEvent/IItemEventRouterBase";
@@ -83,19 +85,36 @@ export class BrokerTradeController extends TradeController
     
                         // Logging section
                         if (tReqData.isFleaMarket)
-                            verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. `+ 
-                                `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
-                                `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
-                                `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB)`
-                            );
+                        {
+                            let profitMsg = `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. `+ 
+                            `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
+                            `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
+                            `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB).`;
+                            if (modConfig.profitComissionPercentage > 0)
+                            {
+                                profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB.`;
+                            }
+                            verboseLogger.explicitSuccess(profitMsg);
+                        }
                         else 
                         {
                             const tCurrency = BrokerPriceManager.instance.tradersMetaData[traderId].currency;
                             let profitMsg = 
                                 `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. Profit ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfitInRoubles)} RUB`;
                             if (tCurrency !== "RUB")
+                            {
                                 profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)})`;
+                            }
+                            profitMsg += ".";
+                            if (modConfig.profitComissionPercentage > 0)
+                            {
+                                profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB`;
+                                if (tCurrency !== "RUB")
+                                {
+                                    profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.commission)})`;
+                                }
+                                profitMsg += ".";
+                            }
                             verboseLogger.explicitSuccess(profitMsg);
                         }
     

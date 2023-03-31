@@ -2,6 +2,7 @@
     "logger": {
         "verbose": false
     },
+    "profitComissionPercentage": 0,
     "useRagfair": true,
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
