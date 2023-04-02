@@ -29,6 +29,7 @@ import { PresetHelper } from "@spt-aki/helpers/PresetHelper";
 import { RagfairController } from "@spt-aki/controllers/RagfairController";
 import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
 import { ItemComponentHelper, ItemComponentTypes, ItemPointsData } from "./item_component_helper";
+import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 
 interface BrokerPriceManagerCache
 {
@@ -66,8 +67,10 @@ class BrokerPriceManager
     private ragfairOfferService: RagfairOfferService;
     private ragfairControler: RagfairController;
     private ragfairOfferHelper: RagfairOfferHelper;
+    private traderHelper: TraderHelper;
 
-    public static brokerTraderId = baseJson._id;
+    public static brokerTraderId = baseJson._id; // for flea trades
+    public static brokerTraderCurrencyExhangeId = `${baseJson._id}-currency-exchange`; // for currency exchange
     private componentHelper: ItemComponentHelper;
     
     private dbServer: DatabaseServer;
@@ -78,6 +81,7 @@ class BrokerPriceManager
 
     private _tradersMetaData: TradersMetaData;
     private _itemTraderTable: Record<string, TraderMetaData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
+    private _currencyBasePrices: Record<string, number>; // currency base prices based on PK and Skier prices
     private _itemRagfairPriceTable: Record<string, number>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
     private _clientBrokerSellData: Record<string, BrokerSellData> = {};
@@ -99,6 +103,7 @@ class BrokerPriceManager
         this.ragfairOfferService = container.resolve<RagfairOfferService>("RagfairOfferService");
         this.ragfairOfferHelper = container.resolve<RagfairOfferHelper>("RagfairOfferHelper")
         this.ragfairControler = container.resolve<RagfairController>("RagfairController");
+        this.traderHelper = container.resolve<TraderHelper>("TraderHelper");
 
         this.dbServer = container.resolve<DatabaseServer>("DatabaseServer");
         this.dbGlobals = this.dbServer.getTables().globals;
@@ -111,6 +116,7 @@ class BrokerPriceManager
             return accum;
         }, {}); // make sure it doesn't have the "broker-trader" in it, because he has a coef of 0, which allows him to accurately display his sell prices ingame
         // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
+        this._currencyBasePrices = {};
     }
 
     public setClientBrokerPriceData(data: Record<string, BrokerSellData>): void
@@ -141,6 +147,7 @@ class BrokerPriceManager
             if (modConfig.useCache)
                 this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
+        this.initializeCurrencyBuyRates(); // no need to cache since it's trivial
     } 
 
     private generateLookUpTables(): void
@@ -195,6 +202,21 @@ class BrokerPriceManager
         console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables successfully loaded from cache.`);
     }
 
+    private initializeCurrencyBuyRates()
+    {
+        // Get USD and EUR prices from PK and Skier assorts
+        const pkAssort = this.traderHelper.getTraderAssortsById(Traders.PEACEKEEPER);
+        const pkUsdItemId = pkAssort.items.find(item => item._tpl === Money.DOLLARS)._id;
+        const pkDollarPrice = pkAssort.barter_scheme[pkUsdItemId][0][0].count;
+
+        const skiAssort = this.traderHelper.getTraderAssortsById(Traders.SKIER);
+        const skiEurItemId = skiAssort.items.find(item => item._tpl === Money.EUROS)._id;
+        const skiEuroPrice = skiAssort.barter_scheme[skiEurItemId][0][0].count;
+
+        this._currencyBasePrices[Money.DOLLARS] = pkDollarPrice;
+        this._currencyBasePrices[Money.EUROS] = skiEuroPrice;
+    }
+
     public static getInstance(container?: DependencyContainer): BrokerPriceManager
     {
         if (!this._instance)
@@ -204,9 +226,14 @@ class BrokerPriceManager
         return this._instance;
     }
 
-    public static isBrokerTraderId(traderId: string): boolean
+    public static isFleaMarket(traderId: string): boolean
     {
         return BrokerPriceManager.brokerTraderId === traderId;
+    }
+
+    public static isBrokerId(traderId: string): boolean
+    {
+        return [BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(traderId);
     }
 
     public get container(): DependencyContainer
@@ -217,6 +244,11 @@ class BrokerPriceManager
     public static get instance(): BrokerPriceManager
     {
         return this.getInstance();
+    }
+
+    public get currencyBasePrices(): Record<string, number>
+    {
+        return this._currencyBasePrices
     }
 
     public get tradersMetaData(): TradersMetaData
@@ -274,15 +306,23 @@ class BrokerPriceManager
             };
         }
         // Manually add Broker's Meta Data
-        // Only used as a sort of "sell to flea" flag
-        data[baseJson._id] = {
-            id: baseJson._id,
-            name: baseJson.nickname.toUpperCase(),
+        // Only used as a sort of "sell to flea" or "currency exchange" flag
+        data[BrokerPriceManager.brokerTraderId] = {
+            id: BrokerPriceManager.brokerTraderId,
+            name: `${baseJson.nickname.toUpperCase()}(Flea Market)`,
             currency: "RUB",
             itemsBuy: {category: [], id_list: []},
             itemsBuyProhibited: {category: [], id_list: []},
             buyPriceCoef: Infinity // to make sure it's never selected as the most profitable trader
-        }
+        }; 
+        data[BrokerPriceManager.brokerTraderCurrencyExhangeId] ={
+            id: BrokerPriceManager.brokerTraderCurrencyExhangeId,
+            name: `${baseJson.nickname.toUpperCase()}(Currency Ex.)`,
+            currency: "RUB",
+            itemsBuy: {category: [], id_list: []},
+            itemsBuyProhibited: {category: [], id_list: []},
+            buyPriceCoef: Infinity // to make sure it's never selected as the most profitable trader
+        } ;
         return data;
     }
 
@@ -323,6 +363,9 @@ class BrokerPriceManager
      */
     public getBestTraderForItem(pmcData: IPmcData, item: Item): TraderMetaData
     {
+        // explicit assignment of Broker when selling money for currency exchange, seems needless to go through everything.
+        if (this.paymentHelper.isMoneyTpl(item._tpl)) return this._tradersMetaData[BrokerPriceManager.brokerTraderCurrencyExhangeId];
+
         const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canBeSoldToTrader(pmcData, item, traderMeta.id));
         if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
         // the lower the coef the more money you'll get
@@ -354,12 +397,16 @@ class BrokerPriceManager
      */
     public getBestSellDecisionForItem(pmcData: IPmcData, item: Item): SellDecision
     {
+        // Client data is very important for accuracy 
         if (this._clientBrokerSellData[item._id] != undefined)
         {
             //console.log(`[BROKER] RECEIVED SELL DATA FROM CLIENT FOR ${item._id}`);
             const clientSellData = this._clientBrokerSellData[item._id];
+            const itemIsMoney = this.paymentHelper.isMoneyTpl(item._tpl);
+            const isBroker = BrokerPriceManager.isFleaMarket(clientSellData.TraderId)
             return {
-                traderId: clientSellData.TraderId,
+                // Separate currency exchanges from flea trades.
+                traderId: isBroker && itemIsMoney ? BrokerPriceManager.brokerTraderCurrencyExhangeId : clientSellData.TraderId,
                 price: clientSellData.Price,
                 priceInRoubles: clientSellData.PriceInRoubles,
                 commission: clientSellData.Commission,
@@ -379,7 +426,7 @@ class BrokerPriceManager
         // console.log(`[TAX] ${this.ragfairTaxHelper.calculateTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true)}`);
         // console.log("PARAMS:",item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true);
 
-        // Tarkov price logic is simple - Math.Floor profits, Math.Ceil losses.
+        // Tarkov price logic is simple - Math.Floor profits, Math.Ceil losses, Round Taxes.
         if (modConfig.useRagfair && ragfairPrice >= traderPrice && this.canSellOnFlea(item) && this.playerCanUseFlea(pmcData))
         {
             return {
@@ -387,16 +434,18 @@ class BrokerPriceManager
                 price: Math.ceil(ragfairPrice),
                 priceInRoubles: Math.ceil(ragfairPrice),
                 commission: Math.round(ragfairPrice * modConfig.profitCommissionPercentage / 100),
-                commissionInRoubles: Math.round(ragfairPrice * modConfig.profitCommissionPercentage / 100),
+                commissionInRoubles: Math.round(ragfairPrice * modConfig.profitCommissionPercentage / 100), // for ragfair there is no conversion
                 tax: Math.round(this.getItemRagfairTax(item, pmcData, ragfairPrice, this.getItemStackObjectsCount(item), true) ?? 0)
             };
         }
+        const itemIsMoney = this.paymentHelper.isMoneyTpl(item._tpl); // if it's a currency exchange - no commission.
         return {
             traderId: bestTrader.id,
-            price: Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)),
-            priceInRoubles: Math.floor(traderPrice),
-            commission: Math.round(Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)) * modConfig.profitCommissionPercentage / 100),
-            commissionInRoubles: Math.round(Math.floor(traderPrice) * modConfig.profitCommissionPercentage / 100)
+            // perhaps "isMoney" check should be moved elsewhere, can't be bothered right now.
+            price: itemIsMoney ? Math.round(traderPrice) : Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)),
+            priceInRoubles: itemIsMoney ? Math.round(traderPrice) : Math.floor(traderPrice),
+            commission: itemIsMoney ? 0 : Math.round(Math.floor(this.convertRoublesToTraderCurrency(traderPrice, bestTrader.id)) * modConfig.profitCommissionPercentage / 100),
+            commissionInRoubles: itemIsMoney ? 0 : Math.round(Math.floor(traderPrice) * modConfig.profitCommissionPercentage / 100)
         };
     }
 
@@ -533,7 +582,7 @@ class BrokerPriceManager
             {
                 // Create new group
                 accum[groupByTraderId] = {
-                    isFleaMarket: BrokerPriceManager.isBrokerTraderId(groupByTraderId),
+                    isFleaMarket: BrokerPriceManager.isFleaMarket(groupByTraderId),
                     traderName: this._tradersMetaData[groupByTraderId].name,
                     totalPrice: itemPrice,
                     totalTax: itemTax,
@@ -548,7 +597,7 @@ class BrokerPriceManager
                         Action: sellData.Action,
                         items: [currItem],
                         price: profit,
-                        tid: groupByTraderId,
+                        tid: BrokerPriceManager.isBrokerId(groupByTraderId) ? BrokerPriceManager.brokerTraderId : groupByTraderId,
                         type: sellData.type
                     }
                 };
@@ -590,6 +639,9 @@ class BrokerPriceManager
     // Reference - "TraderClass.GetUserItemPrice"
     public getItemTraderPrice(pmcData: IPmcData, item: Item, traderId: string): number
     {
+        // explicit currency pricing, price is rounded on getBestSellDecision.
+        if (this.paymentHelper.isMoneyTpl(item._tpl)) return this._currencyBasePrices[item._tpl] * this.getBrokerBuyRates()[item._tpl] * this.getItemStackObjectsCount(item);
+
         if (!this.canBeSoldToTrader(pmcData, item, traderId)) return 0;
 
         const traderMeta = this._tradersMetaData[traderId];
@@ -598,6 +650,14 @@ class BrokerPriceManager
         let price = this.getBuyoutPriceForAllItems(pmcData, item, 0, traderId === Traders.FENCE);
         price = price * (1 - traderMeta.buyPriceCoef/100); // apply trader price modifier
         return price;
+    }
+
+    public getBrokerBuyRates(): Record<string, number>
+    {
+        const rates = {};
+        rates[Money.DOLLARS] = modConfig.buyRateDollar;
+        rates[Money.EUROS] = modConfig.buyRateEuro;
+        return rates;
     }
 
     /**

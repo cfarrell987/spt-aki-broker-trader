@@ -86,7 +86,7 @@ export class BrokerTradeController extends TradeController
                         // Logging section
                         if (tReqData.isFleaMarket)
                         {
-                            let profitMsg = `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. `+ 
+                            let profitMsg = `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. `+ 
                             `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
                             `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
                             `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB).`;
@@ -106,7 +106,7 @@ export class BrokerTradeController extends TradeController
                                 profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)})`;
                             }
                             profitMsg += ".";
-                            if (modConfig.profitCommissionPercentage > 0)
+                            if (modConfig.profitCommissionPercentage > 0 && tReqData.commissionInRoubles > 0) // no need for commission log when it's 0 (e.g. currency exhange)
                             {
                                 profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB`;
                                 if (tCurrency !== "RUB")

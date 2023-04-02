@@ -2,6 +2,8 @@
     "logger": {
         "verbose": false
     },
+    "buyRateDollar": 1,
+    "buyRateEuro": 1,
     "profitCommissionPercentage": 0,
     "useRagfair": true,
     "ragfairIgnoreAttachments": true,

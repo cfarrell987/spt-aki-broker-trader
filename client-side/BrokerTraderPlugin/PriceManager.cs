@@ -17,6 +17,8 @@ namespace BrokerTraderPlugin
 {
     internal struct ModConfig
     {
+        public float BuyRateDollar { get; set; }
+        public float BuyRateEuro { get; set; }
         public float ProfitCommissionPercentage { get; set; }
         public bool UseRagfair { get; set; }
         public bool RagfairIgnoreAttachments { get; set; }
@@ -37,15 +39,15 @@ namespace BrokerTraderPlugin
 
     internal readonly struct TraderItemPriceData
     {
-        public readonly TraderClass Trader { get; }
+        public readonly string TraderId { get; }
         public readonly ItemPrice? Price { get; }
         public readonly int Amount { get; }
         public readonly int AmountInRoubles { get; }
         public readonly int Commission { get; }
         public readonly int CommissionInRoubles { get; }
-        public TraderItemPriceData(TraderClass trader, ItemPrice? price, int amount = -1, int amountInRoubles = -1, int commission = 0, int commissionInRoubles = 0)
+        public TraderItemPriceData(string traderId, ItemPrice? price, int amount = -1, int amountInRoubles = -1, int commission = 0, int commissionInRoubles = 0)
         {
-            Trader = trader;
+            TraderId = traderId;
             Price = price;
             Amount = amount;
             AmountInRoubles = amountInRoubles;
@@ -100,6 +102,7 @@ namespace BrokerTraderPlugin
         public static Dictionary<string, double> ItemRagfairPriceTable { get; set; } = new Dictionary<string, double>();
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
+        public static Dictionary<string, double> CurrencyBasePrices { get; set; } = new Dictionary<string, double>();
         // Requests in a static constructor will be performed only once for initialization.
         static PriceManager()
         {
@@ -108,6 +111,12 @@ namespace BrokerTraderPlugin
             var modCfgBody = Json.Deserialize<ResponseBody<ModConfig>>(response);
             ThrowIfErrorResponseBody(modCfgBody, $"[BROKER TRADER] Couldn't get Mod Config!");
             ModConfig = modCfgBody.Data;
+
+            // Request PK and Skier USD/EUR prices
+            response = RequestHandler.GetJson("/broker-trader/get/currency-base-prices");
+            var currencyBasePricesData = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
+            ThrowIfErrorResponseBody(currencyBasePricesData, $"[BROKER TRADER] Couldn't get Currency Base Prices!");
+            CurrencyBasePrices = currencyBasePricesData.Data;
 
             // Request supported trader ids
             response = RequestHandler.GetJson("/broker-trader/get/supported-trader-ids");
@@ -143,6 +152,18 @@ namespace BrokerTraderPlugin
                 throw (new Exception(msg));
             }
 
+            // Explicitly assign Broker to currencies
+            // No need to check for Roubles since plugin only affets ItemPrice? where not NULL
+            // So accepted items are governed by base.json, or setup in the mod.ts.
+            if (CurrencyHelper.IsCurrencyId(item.TemplateId))
+            {
+                double amount = CurrencyBasePrices[item.TemplateId] * item.StackObjectsCount;
+                if (item.TemplateId == CurrencyHelper.DOLLAR_ID) amount *= ModConfig.BuyRateDollar;
+                if (item.TemplateId == CurrencyHelper.EURO_ID) amount *= ModConfig.BuyRateEuro;
+                int roundedAmount = Convert.ToInt32(Math.Round(amount));
+                return new TraderItemPriceData(BROKER_TRADER_ID, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, roundedAmount)), roundedAmount, roundedAmount, 0, 0);
+            }
+
             // Look for highest paying trader, but get price in roubles,
             // trader appropriate conversion should be done separately, for precision.
             TraderItemPriceData bestTraderPrice = GetTraderItemPriceData(TradersList.First(), item);
@@ -163,9 +184,9 @@ namespace BrokerTraderPlugin
             if (SupplyData[trader.Id] == null)
             {
                 Debug.LogError("supplyData is null");
-                return new TraderItemPriceData(trader, null, -1, -1);
+                return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader, null, -1, -1);
+            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader.Id, null, -1, -1);
             string currencyId = CurrencyHelper.GetCurrencyId(trader.Settings.Currency);
             double amount = PriceHelper.CalculateBasePriceForAllItems(item, 0, SupplyData[trader.Id], trader.Settings.BuyerUp);
             int amountInRoubles = Convert.ToInt32(Math.Floor(trader.Info.ApplyPriceModifier(amount))); // save rouble price
@@ -179,9 +200,9 @@ namespace BrokerTraderPlugin
             int commission = Convert.ToInt32(Math.Round(finalAmount * ModConfig.ProfitCommissionPercentage / 100));
             if (amount.ApproxEquals(0.0))
             {
-                return new TraderItemPriceData(trader, null, -1, -1);
+                return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            return new TraderItemPriceData(trader, new ItemPrice?(new ItemPrice(currencyId, finalAmount - commission)), finalAmount, amountInRoubles, commission, commissionInRoubles);
+            return new TraderItemPriceData(trader.Id, new ItemPrice?(new ItemPrice(currencyId, finalAmount - commission)), finalAmount, amountInRoubles, commission, commissionInRoubles);
         }
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
@@ -327,7 +348,7 @@ namespace BrokerTraderPlugin
             // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
             return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
                 ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax, ragfairPrice.Commission, ragfairPrice.Commission)
-                : new BrokerItemSellData(item.Id, traderPrice.Trader.Id, traderPrice.Amount, traderPrice.AmountInRoubles, 0, traderPrice.Commission, traderPrice.CommissionInRoubles);
+                : new BrokerItemSellData(item.Id, traderPrice.TraderId, traderPrice.Amount, traderPrice.AmountInRoubles, 0, traderPrice.Commission, traderPrice.CommissionInRoubles);
         }
 
         private static bool isFoundInRaid(Item item)
