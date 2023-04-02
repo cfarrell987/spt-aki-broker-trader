@@ -29,6 +29,10 @@ import { BrokerPriceManager } from "./broker_price_manager";
 import { VerboseLogger } from "./verbose_logger";
 import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
 import { LogBackgroundColor } from "@spt-aki/models/spt/logging/LogBackgroundColor";
+import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBuyTradeRequestData";
+import { Money } from "@spt-aki/models/enums/Money";
+import { Traders } from "@spt-aki/models/enums/Traders";
+import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 
 @injectable()
 export class BrokerTradeController extends TradeController
@@ -57,6 +61,27 @@ export class BrokerTradeController extends TradeController
             if (body.tid === baseJson._id)
             {
                 const logPrefix = `[${modInfo.name} ${modInfo.version}]`;        
+                if (body.type === "buy_from_trader")
+                {
+                    // Redirect currency purchases to corresponding traders
+                    const buyRequestData = body as IProcessBuyTradeRequestData;
+                    const traderHelper = BrokerPriceManager.instance.container.resolve<TraderHelper>(TraderHelper.name);
+                    const brokerAssort = traderHelper.getTraderAssortsById(BrokerPriceManager.brokerTraderId);
+                    const brokerUsdItem = brokerAssort.items.find(item => item._tpl === Money.DOLLARS)._id;
+                    const brokerEurItem = brokerAssort.items.find(item => item._tpl === Money.EUROS)._id;
+
+                    if (buyRequestData.item_id === brokerUsdItem)
+                    {
+                        buyRequestData.tid = Traders.PEACEKEEPER;
+                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER).items.find(item => item._tpl === Money.DOLLARS)._id;
+                    }
+                    if (buyRequestData.item_id === brokerEurItem)
+                    {
+                        buyRequestData.tid = Traders.SKIER;
+                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.SKIER).items.find(item => item._tpl === Money.EUROS)._id
+                    } 
+                    // Let it skip to the super.confirmTrading call at the bottom.
+                }
                 if (body.type === "sell_to_trader") 
                 {
                     const priceManager = BrokerPriceManager.instance;
@@ -167,6 +192,8 @@ export class BrokerTradeController extends TradeController
                     return mergedResponse;
                 }
             }
+            //console.log(`TRADING TYPE: ${body.Action}`);
+            //console.log(`BUYREQ DUMP: ${JSON.stringify(body)}`)
             return super.confirmTrading(pmcData, body, sessionID, foundInRaid, upd);
         }
         catch (error) 

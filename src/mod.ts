@@ -55,6 +55,12 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
             throw (`${this.mod} Config error. "profitCommissionPercentage" out of range [0-99]`);
         }
 
+        if (modCfg.buyRateDollar < 0 || modCfg.buyRateEuro < 0)
+        {
+            this.logger.explicitError(`[${this.mod}] Config error! One of currencies "buyRate", is less than 0.`)
+            throw (`${this.mod} Config error. A currency "buyRate" must be a positive number.`);
+        }
+
         const preAkiModLoader: PreAkiModLoader = container.resolve<PreAkiModLoader>("PreAkiModLoader");
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");
         const configServer = container.resolve<ConfigServer>("ConfigServer");
