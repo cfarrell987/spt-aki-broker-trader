@@ -231,7 +231,7 @@ class BrokerPriceManager
         return BrokerPriceManager.brokerTraderId === traderId;
     }
 
-    public static isBrokerId(traderId: string): boolean
+    public static isBroker(traderId: string): boolean
     {
         return [BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(traderId);
     }
@@ -597,7 +597,7 @@ class BrokerPriceManager
                         Action: sellData.Action,
                         items: [currItem],
                         price: profit,
-                        tid: BrokerPriceManager.isBrokerId(groupByTraderId) ? BrokerPriceManager.brokerTraderId : groupByTraderId,
+                        tid: BrokerPriceManager.isBroker(groupByTraderId) ? BrokerPriceManager.brokerTraderId : groupByTraderId,
                         type: sellData.type
                     }
                 };

@@ -90,6 +90,7 @@ export class BrokerTradeController extends TradeController
                     const container = priceManager.container; 
                     const verboseLogger = new VerboseLogger(container);
                     const sellRequestBody = body as IProcessSellTradeRequestData;
+                    const traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
                     const handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name);
 
                     // Logging. Shouldn't be executed during normal use, since it additionally searches for items in player inventory by id.
@@ -103,11 +104,20 @@ export class BrokerTradeController extends TradeController
                     const responses: IItemEventRouterResponse[] = [];
                     const sellReqDataPerTrader = priceManager.processSellRequestDataForMostProfit(pmcData, sellRequestBody);
 
+                    // traderId used for grouping, so may contain brokerTraderId(valid trader id) and brokerCurrencyExchangeId(not a valid trader id)
+                    // prefer tReqData.requestBody.tid for actual valid trader id.
                     for (const traderId in sellReqDataPerTrader)
                     {
                         const tReqData = sellReqDataPerTrader[traderId];
                         const tradeResponse = super.confirmTrading(pmcData, tReqData.requestBody, sessionID, foundInRaid, upd);
-    
+                        
+                        // Make sales sum increase unaffected by commission.
+                        // commission is converted to trader currency(don't use commissionInRoubles)
+                        if (!BrokerPriceManager.isBroker(traderId))
+                        {
+                            pmcData.TradersInfo[tReqData.requestBody.tid].salesSum += tReqData.commission;
+                        }
+
                         // Logging section
                         if (tReqData.isFleaMarket)
                         {
