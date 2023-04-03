@@ -61,7 +61,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
             throw (`${this.mod} Config error. A currency "buyRate" must be a positive number.`);
         }
 
-        if (!modCfg["useClientPlugin"] ?? false) // hidden config property check
+        if (!(modCfg["useClientPlugin"] ?? true)) // hidden config property check
         {
             this.logger.explicitWarning(`[${this.mod}] Warning! Using this mod with "useClientPlugin": false is not directly supported. Price inaccuracies are expected. If you encounted serious problems(features completely not functioning, endless loadings, server exceptions etc.), please inform the developer directly.`);
         }
