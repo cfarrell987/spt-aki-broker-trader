@@ -3,7 +3,6 @@ import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcess
 
 export interface BrokerPriceManagerCache
 {
-    tradersMetaData: TradersMetaData;
     itemRagfairPriceTable: Record<string, number>;
 }
 

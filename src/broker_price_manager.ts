@@ -111,7 +111,7 @@ export class BrokerPriceManager
         // This method should fail if class hasn't been yet instantialized.
         const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
         const cacheFullPath = path.normalize(path.resolve(`${__dirname}/../cache/cache.json`));
-        // console.log(cacheFullPath);
+        
         if (fs.existsSync(cacheFullPath) && modConfig.useCache)
         {
             this.tryToLoadCache(cacheFullPath);
@@ -123,27 +123,27 @@ export class BrokerPriceManager
                 this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
         
+        this._tradersMetaData = this.getTradersMetaData(); // no need to cache, it's trivial and new traders might require it to be up-to-date. 
+        console.log(`[${modInfo.name} ${modInfo.version}] Loaded trader meta data from database.`);
         this.initializeCurrencyBuyRates(); // no need to cache since it's trivial
         console.log(`[${modInfo.name} ${modInfo.version}] Loaded currency buy rates from config.`);
+        
+        
     } 
 
     private generateLookUpTables(): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating look-up tables...`);
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating Traders Meta Data...`);
-        this._tradersMetaData = this.getTradersMetaData();
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Generating ragfair price look-up table...`);
         this._itemRagfairPriceTable = this.getItemRagfairPriceTable();
-        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables generation completed.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up table successfully generated.`);
     }
 
     private tryToSaveCache(absCacheDir: string, absCacheFullPath: string): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Saving look-up tables to cache...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Saving ragfair price look-up table to cache...`);
         try 
         {
             const bpmCache: BrokerPriceManagerCache = {
-                tradersMetaData: this._tradersMetaData,
                 itemRagfairPriceTable: this._itemRagfairPriceTable
             }
             fs.mkdirSync(absCacheDir);
@@ -153,26 +153,23 @@ export class BrokerPriceManager
         {
             console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't save to cache.`);
         }
-        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables successfully cached.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up table successfully cached.`);
     }
 
     private tryToLoadCache(absCacheFullPath: string): void
     {
-        console.log(`[${modInfo.name} ${modInfo.version}] Loading look-up tables from cache...`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Loading ragfair price look-up table from cache...`);
         try 
         {
             const bpmCache = JSON.parse(fs.readFileSync(absCacheFullPath, {flag: "r"}).toString()) as BrokerPriceManagerCache;
-            this._tradersMetaData = bpmCache.tradersMetaData;
             this._itemRagfairPriceTable = bpmCache.itemRagfairPriceTable;
-            // console.log("CACHE:");
-            // console.log(`${JSON.stringify(bpmCache)}`);
         }
         catch (error) 
         {
             console.log(`[${modInfo.name} ${modInfo.version}] Error. Couldn't load look-up tables from cache. Please remove cache file if it exists, to resave the cache next time you launch the server.`);
             this.generateLookUpTables();
         }
-        console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables successfully loaded from cache.`);
+        console.log(`[${modInfo.name} ${modInfo.version}] Look-up table successfully loaded from cache.`);
     }
 
     private initializeCurrencyBuyRates()
@@ -259,7 +256,7 @@ export class BrokerPriceManager
     }
 
     /**
-     * Collect and return traders meta data.
+     * Collect and return traders meta data from database.
      * Includes 2 "traders" to designate Broker flea sales and currency exchange
      * @returns TradersMetaData. Key is trader Id, value - TraderMetaData
      */
