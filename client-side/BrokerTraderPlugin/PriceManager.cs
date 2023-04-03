@@ -62,9 +62,9 @@ namespace BrokerTraderPlugin
         public readonly int RequirementsAmount { get; }
         public readonly int Tax { get; }
         public readonly int Commission { get; }
-        public RagfairItemPriceData( ItemPrice? price, int requirementsAmount, int tax = 0, int commission = 0)
+        public RagfairItemPriceData(ItemPrice? price, int requirementsAmount, int tax = 0, int commission = 0)
         {
-            Price= price; 
+            Price = price;
             RequirementsAmount = requirementsAmount;
             Tax = tax;
             Commission = commission;
@@ -94,7 +94,7 @@ namespace BrokerTraderPlugin
 
     internal static class PriceManager
     {
-        public const string BROKER_TRADER_ID = "broker-trader-id";
+        public const string BROKER_TRADER_ID = "broker-trader-id"; // Currency ex. Broker tid is handled serverside.
         public static ISession Session { get; set; }
         public static ModConfig ModConfig { get; set; }
         public static BackendConfigSettingsClass BackendCfg { get; set; }
@@ -207,7 +207,7 @@ namespace BrokerTraderPlugin
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
         {
-            if(!ModConfig.UseRagfair)
+            if (!ModConfig.UseRagfair)
             {
                 return new RagfairItemPriceData(null, -1);
             }
@@ -321,20 +321,13 @@ namespace BrokerTraderPlugin
                 requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * (double)gclass.PriceModifier;
             }
             requirementsPrice *= item.StackObjectsCount;
-            // !IMPORTANT Round the tax
-            //int tax = Convert.ToInt32(Math.Round(PriceHelper.CalculateTaxPrice(item, item.StackObjectsCount, requirementsPrice, true)));
-            // !IMPORTANT Floor the price
-            //int amount = Convert.ToInt32(Math.Floor(requirementsPrice));
-            //return new RagfairItemPriceData(amount, tax, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax)));
             return requirementsPrice;
         }
         public static ItemPrice? GetBestItemPrice(Item item)
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            // For now leave the "useRagfair" here so if any integral issues are present
-            // they will be detected since both the code for trader and ragfair pricing will run.
-            // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
+            // UseRagfair check is not necessary but let it be an extra measure.
             return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
                 ? ragfairPrice.Price
                 : traderPrice.Price;
@@ -343,9 +336,7 @@ namespace BrokerTraderPlugin
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
-            // For now leave the "useRagfair" here so if any integral issues are present
-            // they will be detected since both the code for trader and ragfair pricing will run.
-            // Later "useRagfair" should simply set the RequirementsAmount to -1 in GetSignleRagfairItemPriceData
+            // UseRagfair check is not necessary but let it be an extra measure.
             return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
                 ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax, ragfairPrice.Commission, ragfairPrice.Commission)
                 : new BrokerItemSellData(item.Id, traderPrice.TraderId, traderPrice.Amount, traderPrice.AmountInRoubles, 0, traderPrice.Commission, traderPrice.CommissionInRoubles);
