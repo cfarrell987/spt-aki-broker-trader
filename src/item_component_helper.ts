@@ -27,6 +27,13 @@ class ItemComponentHelper
         this.itemHelper = this.container.resolve<ItemHelper>(ItemHelper.name);
     }
 
+    /**
+     * Return the max durability/resource/key usage/etc. points for a template and a desired component type.
+     * Component type has to be specified since items can have multiple components assigned (E.g. cultist knife is both Repairable and Side Effect).
+     * @param itemTplId Item template id
+     * @param componentType Component type
+     * @returns number - max points value
+     */
     public getTemplateComponentMaxPoints(itemTplId: string, componentType: string): number
     {
         const props = this.getItemTemplate(itemTplId)._props;
@@ -49,6 +56,12 @@ class ItemComponentHelper
         }
     }
  
+    /**
+     * Get item points data for a certain component type.
+     * @param item Item
+     * @param componentType Component type
+     * @returns ItemPointsData - current points, current max points, template max points.
+     */
     public getItemComponentPoints(item: Item, componentType: string): ItemPointsData
     {
         let currentPoints = 0;
@@ -126,16 +139,22 @@ class ItemComponentHelper
         }
     }
     
+    /**
+     * Get item component points for ragfair. In current implementation to mirror the observed SPT-AKI flea behaviour,
+     * items use only one component and their price is scaled only based on current durability.
+     * @param item Item
+     * @returns ItemPointsData
+     */
     public getRagfairItemComponentPoints(item: Item): ItemPointsData
     {
         return this.getItemComponentPoints(item, this.getItemRagfairComponentType(item));
     }
 
     /**
-     * For Items
-     * @param item 
-     * @param componentType 
-     * @returns 
+     * Check if item has a component type assigned.
+     * @param item Item
+     * @param componentType Component type
+     * @returns true | false
      */
     public hasComponent(item: Item, componentType: string): boolean
     {
@@ -143,7 +162,8 @@ class ItemComponentHelper
     }
 
     /**
-     * For Item Templates
+     * Check if item template has a component type assigned. 
+     * Some component types can't be assigned to a brand new "template" item by default, e.g. Weapon/Armour Buff.
      * @param itemTplId 
      * @param componentType 
      * @returns 
@@ -153,6 +173,11 @@ class ItemComponentHelper
         return this.getTemplateComponentTypes(itemTplId).includes(componentType);
     }
 
+    /**
+     * Get all component types which provided item currently has.
+     * @param item Item
+     * @returns string[] - all component types an item has
+     */
     public getItemComponentTypes(item: Item): string[]
     {
         const components = this.getTemplateComponentTypes(item._tpl);
@@ -164,12 +189,22 @@ class ItemComponentHelper
         return components;
     }
 
+    /**
+     * Get ragfair specific item component type. (Due to current implementation)
+     * @param item Item
+     * @returns string - component type
+     */
     // Needed only to preserve current ragfair pricing implementation
     public getItemRagfairComponentType(item: Item): string
     {
         return this.getTemplateComponentTypes(item._tpl).find(componentType => Object.keys(RagfairItemComponentTypes).some(key => RagfairItemComponentTypes[key] === componentType));
     }
 
+    /**
+     * Get all component types of an item template.
+     * @param itemTplId Item template id
+     * @returns string[]
+     */
     public getTemplateComponentTypes(itemTplId: string): string[]
     {
         const props = this.getItemTemplate(itemTplId)._props;
@@ -205,6 +240,11 @@ class ItemComponentHelper
         return components;
     }
 
+    /**
+     * Check if item is a dogtag(seems to also be a component).
+     * @param itemTplId Item template id
+     * @returns true | false
+     */
     public isDogtagTplId(itemTplId: string): boolean
     {
         // BEAR DOGTAG - "59f32bb586f774757e1e8442"
@@ -212,6 +252,11 @@ class ItemComponentHelper
         return itemTplId === "59f32bb586f774757e1e8442" || itemTplId === "59f32c3b86f77472a31742f0";
     }
 
+    /**
+     * Get an item template from the database. Throws an exception if item not found.
+     * @param itemTplId Item template id
+     * @returns ITemplateItem
+     */
     private getItemTemplate(itemTplId: string): ITemplateItem
     {
         const itemTpl = this.dbItems[itemTplId]
@@ -219,102 +264,14 @@ class ItemComponentHelper
         return itemTpl;
     }
 
+    /**
+     * Check if all of the provided values have an assigned value(not null|undefined).
+     * @param values Array of values
+     * @returns true | false
+     */
     private allNotNull(values: any[]): boolean
     {
         return !values.some(value => value == undefined);
-    }
-
-    private get componentsProperties(): Dictionary<ItemComponentProperties>
-    {
-        const compProps = {};
-        compProps[ItemComponentTypes.REPAIRABLE] = {
-            template: [
-                "MaxDurability"
-            ],
-            upd: [
-                "Durability",
-                "MaxDurability"
-            ]
-        }
-        compProps[ItemComponentTypes.BUFF] = {
-            template: [
-            ],
-            upd: [
-                "rarity",
-                "buffType",
-                "value",
-                "thresholdDurability"
-            ]
-        }
-        compProps[ItemComponentTypes.DOGTAG] = {
-            template: [
-            ],
-            upd: [
-                // "AccountId",
-                // "ProfileId",
-                // "Nickname",
-                // "Side",
-                "Level" // only level is needed for price calculations
-                // "Time",
-                // "Status",
-                // "KillerAccountId",
-                // "KillerProfileId",
-                // "KillerName",
-                // "WeaponName"
-            ]
-        }
-        compProps[ItemComponentTypes.KEY] = {
-            template: [
-                "MaximumNumberOfUsage"
-            ],
-            upd: [
-                "NumberOfUsages"
-            ]
-        }
-        compProps[ItemComponentTypes.RESOURCE] = {
-            template: [
-                "Resource",
-                "MaxResource"
-            ],
-            upd: [
-                "Value",
-                "UnitsConsumed"
-            ]
-        }
-        compProps[ItemComponentTypes.SIDE_EFFECT] = {
-            template: [
-                "StimulatorBuffs",
-                "MaxResource"
-            ],
-            upd: [
-                "Value"
-            ]
-        }
-        compProps[ItemComponentTypes.MEDKIT] = {
-            template: [
-                "MaxHpResource"
-            ],
-            upd: [
-                "HpResource"
-            ]
-        }
-        compProps[ItemComponentTypes.FOOD_DRINK] = {
-            template: [
-                "MaxResource"
-            ],
-            upd: [
-                "HpPercent"
-            ]
-        }
-        compProps[ItemComponentTypes.REPAIRKIT] = {
-            template: [
-                "MaxRepairResource"
-            ],
-            upd: [
-                "Resource"
-            ]
-        }
-        return compProps;
     }
 }
 
@@ -323,12 +280,6 @@ interface ItemPointsData
     points: number;
     maxPoints: number;
     templateMaxPoints: number;
-}
-
-interface ItemComponentProperties 
-{
-    template: string[];
-    upd: string[];
 }
 
 // All component type which matter for trader price calculation

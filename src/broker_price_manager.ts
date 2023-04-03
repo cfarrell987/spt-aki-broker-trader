@@ -34,7 +34,6 @@ import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 interface BrokerPriceManagerCache
 {
     tradersMetaData: TradersMetaData;
-    itemTraderTable: Record<string, TraderMetaData>;
     itemRagfairPriceTable: Record<string, number>;
 }
 
@@ -59,16 +58,15 @@ class BrokerPriceManager
     private handbookHelper: HandbookHelper; // Using with hydrateLookup() might be good to check if items exist in handbook and find their ragfair avg price
     private paymentHelper: PaymentHelper;
     private itemHelper: ItemHelper;
-    private itemBaseClassService: ItemBaseClassService;
     private presetHelper: PresetHelper;
-    private ragfairServerHelper: RagfairServerHelper; // Mb remove in the future
+    private ragfairServerHelper: RagfairServerHelper;
     private ragfairPriceService: RagfairPriceService;
-    private ragfairTaxHelper: RagfairTaxHelper;
     private ragfairOfferService: RagfairOfferService;
-    private ragfairControler: RagfairController;
-    private ragfairOfferHelper: RagfairOfferHelper;
     private traderHelper: TraderHelper;
 
+    // Broker has several trader ids which separate his operations
+    // default valid id is used for selling items to flea
+    // the currency ex. id is invalid, used only to group operations with currencies.
     public static brokerTraderId = baseJson._id; // for flea trades
     public static brokerTraderCurrencyExhangeId = `${baseJson._id}-currency-exchange`; // for currency exchange
     private componentHelper: ItemComponentHelper;
@@ -80,7 +78,6 @@ class BrokerPriceManager
     public supportedTraders: Record<string, string>;
 
     private _tradersMetaData: TradersMetaData;
-    private _itemTraderTable: Record<string, TraderMetaData>; // used as a cache, contains: itemTplId => Most Profitable Trader TraderBaseData
     private _currencyBasePrices: Record<string, number>; // currency base prices based on PK and Skier prices
     private _itemRagfairPriceTable: Record<string, number>; // used as a cache, contains itemTplId => avg price, price per point(of durability/resource), tax, tax per point
 
@@ -91,38 +88,36 @@ class BrokerPriceManager
         this._container = container ?? tsyringeContainer;
 
         this.componentHelper = new ItemComponentHelper(this._container);
+        this.itemHelper = container.resolve<ItemHelper>(ItemHelper.name);
+        this.presetHelper = container.resolve<PresetHelper>(PresetHelper.name)
+        this.handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name);
+        this.paymentHelper = container.resolve<PaymentHelper>(PaymentHelper.name);
+        this.ragfairServerHelper = container.resolve<RagfairServerHelper>(RagfairServerHelper.name);
+        this.ragfairPriceService = container.resolve<RagfairPriceService>(RagfairPriceService.name);
+        this.ragfairOfferService = container.resolve<RagfairOfferService>(RagfairOfferService.name);
+        this.traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
 
-        this.itemHelper = container.resolve<ItemHelper>("ItemHelper");
-        this.presetHelper = container.resolve<PresetHelper>("PresetHelper")
-        this.handbookHelper = container.resolve<HandbookHelper>("HandbookHelper");
-        this.paymentHelper = container.resolve<PaymentHelper>("PaymentHelper");
-        this.itemBaseClassService = container.resolve<ItemBaseClassService>("ItemBaseClassService");
-        this.ragfairServerHelper = container.resolve<RagfairServerHelper>("RagfairServerHelper");
-        this.ragfairPriceService = container.resolve<RagfairPriceService>("RagfairPriceService");
-        this.ragfairTaxHelper = container.resolve<RagfairTaxHelper>("RagfairTaxHelper");
-        this.ragfairOfferService = container.resolve<RagfairOfferService>("RagfairOfferService");
-        this.ragfairOfferHelper = container.resolve<RagfairOfferHelper>("RagfairOfferHelper")
-        this.ragfairControler = container.resolve<RagfairController>("RagfairController");
-        this.traderHelper = container.resolve<TraderHelper>("TraderHelper");
-
-        this.dbServer = container.resolve<DatabaseServer>("DatabaseServer");
+        this.dbServer = container.resolve<DatabaseServer>(DatabaseServer.name);
         this.dbGlobals = this.dbServer.getTables().globals;
         this.handbook = this.dbServer.getTables().templates.handbook;
         this.dbItems = this.dbServer.getTables().templates.items;
         this.dbTraders = this.dbServer.getTables().traders;
+        // TODO: implement custom trader support.
         this.supportedTraders = Object.keys(Traders).filter(key => Traders[key] !== Traders.LIGHTHOUSEKEEPER).reduce((accum, key) => 
         {
             accum[key] = Traders[key];
             return accum;
-        }, {}); // make sure it doesn't have the "broker-trader" in it, because he has a coef of 0, which allows him to accurately display his sell prices ingame
-        // console.log(`SUPPORTED TRADERS DUMP: ${JSON.stringify(this.supportedTraders)}`);
+        }, {}); 
         this._currencyBasePrices = {};
     }
 
+    /**
+     * Assigns "SellDecision" data received from the client. Client provided data allows for accurate prices and taxes.
+     * @param data Received "SellDecision" data.
+     */
     public setClientBrokerPriceData(data: Record<string, BrokerSellData>): void
     {
         this._clientBrokerSellData = data;
-        //console.log(`[SET BROKER DATA] ${JSON.stringify(this._clientBrokerSellData)}`);
     }
 
     /**
@@ -147,7 +142,9 @@ class BrokerPriceManager
             if (modConfig.useCache)
                 this.tryToSaveCache(cacheDir, cacheFullPath);         
         }
+        
         this.initializeCurrencyBuyRates(); // no need to cache since it's trivial
+        console.log(`[${modInfo.name} ${modInfo.version}] Loaded currency buy rates from config.`);
     } 
 
     private generateLookUpTables(): void
@@ -155,8 +152,6 @@ class BrokerPriceManager
         console.log(`[${modInfo.name} ${modInfo.version}] Generating look-up tables...`);
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Traders Meta Data...`);
         this._tradersMetaData = this.getTradersMetaData();
-        console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Trader Table...`);
-        this._itemTraderTable = this.getItemTraderTable();
         console.log(`[${modInfo.name} ${modInfo.version}] Generating Item Ragfair Price Table...`);
         this._itemRagfairPriceTable = this.getItemRagfairPriceTable();
         console.log(`[${modInfo.name} ${modInfo.version}] Look-up tables generation completed.`);
@@ -169,7 +164,6 @@ class BrokerPriceManager
         {
             const bpmCache: BrokerPriceManagerCache = {
                 tradersMetaData: this._tradersMetaData,
-                itemTraderTable: this._itemTraderTable,
                 itemRagfairPriceTable: this._itemRagfairPriceTable
             }
             fs.mkdirSync(absCacheDir);
@@ -189,7 +183,6 @@ class BrokerPriceManager
         {
             const bpmCache = JSON.parse(fs.readFileSync(absCacheFullPath, {flag: "r"}).toString()) as BrokerPriceManagerCache;
             this._tradersMetaData = bpmCache.tradersMetaData;
-            this._itemTraderTable = bpmCache.itemTraderTable;
             this._itemRagfairPriceTable = bpmCache.itemRagfairPriceTable;
             // console.log("CACHE:");
             // console.log(`${JSON.stringify(bpmCache)}`);
@@ -226,11 +219,21 @@ class BrokerPriceManager
         return this._instance;
     }
 
+    /**
+     * Check if provided id is a trader id which designates Broker flea sales.
+     * @param traderId Trader id to check.
+     * @returns true | false - whether it's a "sell to flea" Broker id.
+     */
     public static isFleaMarket(traderId: string): boolean
     {
         return BrokerPriceManager.brokerTraderId === traderId;
     }
 
+    /**
+     * Checks whether the provided trader id is one of Broker's ids, since Broker has two trader ids(one for flea sales, other for currency ex. feature).
+     * @param traderId Trader id to check.
+     * @returns true | false - whether the id is one of Broker's ids.
+     */
     public static isBroker(traderId: string): boolean
     {
         return [BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(traderId);
@@ -256,26 +259,15 @@ class BrokerPriceManager
         return this._tradersMetaData;
     }
 
-    public get itemTraderTable(): Record<string, TraderMetaData>
-    {
-        return this._itemTraderTable;
-    }
-
     public get itemRagfairPriceTable(): Record<string, number>
     {
         return this._itemRagfairPriceTable;
     }
 
-    public getItemTraderTable(): Record<string, TraderMetaData>
-    {
-        // Also check if item exists in handbook to be sure that it's a valid item.
-        return Object.keys(this.dbItems).filter(itemTplId => this.itemHelper.isValidItem(itemTplId) && this.existsInHandbook(itemTplId)).reduce((accum, itemTplId) => 
-        {
-            accum[itemTplId] = this.getBestTraderForItemTpl(itemTplId);
-            return accum;
-        }, {});
-    }
-
+    /**
+     * Collectst average ragfair price for each item template. Used as a base price when calculating item ragfair sell price(Broker sell to flea feature).
+     * @returns Record, key - item template id, value - average ragfair price, based on existing offers.
+     */
     public getItemRagfairPriceTable(): Record<string, number>
     {
         const validRagfairItemTplIds = Object.values(this.dbItems).filter(itemTpl => this.ragfairServerHelper.isItemValidRagfairItem([true, itemTpl])).map(itemTpl => itemTpl._id);
@@ -286,6 +278,11 @@ class BrokerPriceManager
         }, {});
     }
 
+    /**
+     * Collect and return traders meta data.
+     * Includes 2 "traders" to designate Broker flea sales and currency exchange
+     * @returns TradersMetaData. Key is trader Id, value - TraderMetaData
+     */
     private getTradersMetaData(): TradersMetaData
     {
         const data: TradersMetaData = {};
@@ -349,7 +346,7 @@ class BrokerPriceManager
      */
     public canTemplateBeSoldToTrader(itemTplId: string, traderId: string ): boolean
     {
-        const traderMetaData = this._tradersMetaData[traderId];
+        const traderMetaData = this.tradersMetaData[traderId];
         const buysItem = traderMetaData.itemsBuy.category.some(categoryId => this.itemHelper.isOfBaseclass(itemTplId, categoryId)) || traderMetaData.itemsBuy.id_list.includes(itemTplId);
         const notProhibited = !traderMetaData.itemsBuyProhibited.category.some(categoryId => this.itemHelper.isOfBaseclass(itemTplId, categoryId)) && !traderMetaData.itemsBuyProhibited.id_list.includes(itemTplId);
         return buysItem && notProhibited;
@@ -364,23 +361,9 @@ class BrokerPriceManager
     public getBestTraderForItem(pmcData: IPmcData, item: Item): TraderMetaData
     {
         // explicit assignment of Broker when selling money for currency exchange, seems needless to go through everything.
-        if (this.paymentHelper.isMoneyTpl(item._tpl)) return this._tradersMetaData[BrokerPriceManager.brokerTraderCurrencyExhangeId];
+        if (this.paymentHelper.isMoneyTpl(item._tpl)) return this.tradersMetaData[BrokerPriceManager.brokerTraderCurrencyExhangeId];
 
-        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canBeSoldToTrader(pmcData, item, traderMeta.id));
-        if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
-        // the lower the coef the more money you'll get
-        const lowestCoef = Math.min(...sellableTraders.map(trader => trader.buyPriceCoef));
-        return sellableTraders.find(trader => trader.buyPriceCoef === lowestCoef);
-    }
-
-    /**
-     * Get the most profitable trader for an item template.
-     * @param itemTplId Item Template
-     * @returns TraderMetaData
-     */
-    public getBestTraderForItemTpl(itemTplId: string): TraderMetaData
-    {
-        const sellableTraders = Object.values(this._tradersMetaData).filter(traderMeta => this.canTemplateBeSoldToTrader(itemTplId, traderMeta.id));
+        const sellableTraders = Object.values(this.tradersMetaData).filter(traderMeta => this.canBeSoldToTrader(pmcData, item, traderMeta.id));
         if (sellableTraders.length < 1) return null; // If no traders can buy this item return NULL
         // the lower the coef the more money you'll get
         const lowestCoef = Math.min(...sellableTraders.map(trader => trader.buyPriceCoef));
@@ -414,7 +397,8 @@ class BrokerPriceManager
                 tax: clientSellData.Tax
             };
         }
-        console.log(`[${modInfo.name} ${modInfo.version}] Couldn't find Client Sell Data for item id ${item._id}. Processing by server. If this happens very often, inform the developer.`);
+        if (modConfig["useClientPlugin"] ?? true) // sort of a hidden option to disable warnings when you use the mod without the client plugin.
+            console.log(`[${modInfo.name} ${modInfo.version}] Couldn't find Client Sell Data for item id ${item._id}. Processing by server. If this happens very often, inform the developer.`);
         const bestTrader = this.getBestTraderForItem(pmcData, item);
         const traderPrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
         // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
@@ -452,7 +436,7 @@ class BrokerPriceManager
     /**
      * Calculates the flea tax while taking in account user's Intelligence Center bonus and Hideout Management skill.
      * 
-     * Had to make it myself since the RagfairTaxHelper.calculateTax is not accurate and sometimes returned NULL.
+     * Had to make it myself since the RagfairTaxHelper.calculateTax seems not accurate and sometimes returned NULL.
      * @param item Item to evaluate the tax.
      * @param pmcData PMC profile to whom the item belongs.
      * @param requirementsPrice The price you want to sell the item for.
@@ -542,13 +526,6 @@ class BrokerPriceManager
         return this.ragfairServerHelper.isItemValidRagfairItem([foundInRaid, itemTpl]);
     }
 
-    // Or use handbookHelper.getTemplatePrice
-    public existsInHandbook(itemTplId: string): boolean
-    {
-        // return this.handbookHelper.getTemplatePrice(itemTplId) !== 1;
-        return this.handbook.Items.findIndex(hbkItem => hbkItem.Id === itemTplId) > -1;
-    }
-
     /**
      * Checks if user level fits the flea requirement. If "ragfairIgnorePlayerLevel" config value is true - always returns true.
      * @param pmcData PMC profile data
@@ -559,8 +536,13 @@ class BrokerPriceManager
         return modConfig.ragfairIgnorePlayerLevel || (pmcData.Info.Level >= this.dbServer.getTables().globals.config.RagFair.minUserLevel);
     }
 
-    // inventory items are required to check for "item.upd.spawnedInSession"
-    // so you'd have to pass either pmcData and look for items there or inventory items themselves
+    /**
+     * Process a sell request body and return a result of multiple sell requests grouped per trader id.
+     * In the mod used to assign items to corresponding most profitable traders(including Broker flea and currency ex.)
+     * @param pmcData PMC who sells.
+     * @param sellData Body of a sell request.
+     * @returns Processed sell request data.
+     */
     public processSellRequestDataForMostProfit(pmcData: IPmcData, sellData: IProcessSellTradeRequestData): ProcessedSellData
     {
         const sellDataItems = sellData.items;
@@ -583,7 +565,7 @@ class BrokerPriceManager
                 // Create new group
                 accum[groupByTraderId] = {
                     isFleaMarket: BrokerPriceManager.isFleaMarket(groupByTraderId),
-                    traderName: this._tradersMetaData[groupByTraderId].name,
+                    traderName: this.tradersMetaData[groupByTraderId].name,
                     totalPrice: itemPrice,
                     totalTax: itemTax,
                     totalProfit: profit,
@@ -623,19 +605,12 @@ class BrokerPriceManager
     }
 
     /**
-     * Calculates the sell price of an item template for a specific trader.
-     * @param itemTplId Item Template Id.
-     * @param traderId Trader Id.
-     * @returns number - price of selling the item template to trader.
+     * Calculates the item price for a PMC, when selling to a specified trader.
+     * @param pmcData PMC to whom item belongs.
+     * @param item Target item.
+     * @param traderId Target trader id.
+     * @returns number - trader price of an item
      */
-    public getItemTplTraderPrice(itemTplId: string, traderId: string): number
-    {
-        const traderMeta = this._tradersMetaData[traderId];
-        const buyPriceMult = 1 - traderMeta.buyPriceCoef/100;
-        const basePrice = this.handbookHelper.getTemplatePrice(itemTplId); // this.ragfairPriceService.getStaticPriceForItem - can be used instead
-        return Math.round(basePrice * buyPriceMult);
-    }
-
     // Reference - "TraderClass.GetUserItemPrice"
     public getItemTraderPrice(pmcData: IPmcData, item: Item, traderId: string): number
     {
@@ -644,7 +619,7 @@ class BrokerPriceManager
 
         if (!this.canBeSoldToTrader(pmcData, item, traderId)) return 0;
 
-        const traderMeta = this._tradersMetaData[traderId];
+        const traderMeta = this.tradersMetaData[traderId];
         if (traderMeta == undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
 
         let price = this.getBuyoutPriceForAllItems(pmcData, item, 0, traderId === Traders.FENCE);
@@ -652,6 +627,10 @@ class BrokerPriceManager
         return price;
     }
 
+    /**
+     * Collects and returns configured "buyRate" property values in a dictionary(record).
+     * @returns Record, key - currency template id, value - buy rate from mod config.
+     */
     public getBrokerBuyRates(): Record<string, number>
     {
         const rates = {};
@@ -688,6 +667,15 @@ class BrokerPriceManager
         return price;
     }
 
+    /**
+     * Calculates a buyout price for single item. Buyout price can be considered as a pure item value, which is calculated
+     * from item's base price(handbook) influenced by item's component conditions(Repairable? - durability, etc., Buff? - buff value, Resource/Medkit - currenct resource value, etc.).
+     * @param item Target item.
+     * @param itemCount Number of items (usually StackObjectsCount).
+     * @param isFence Is the target trader Fence? Decides whether method should ignore buyout restrictions (Min durability, resource etc.)
+     * @param basePriceSrc Optional. Source for base prices, by default - hanbdook.
+     * @returns number - buyout price
+     */
     // Reference - "GClass1969.CalculateBuyoutBasePriceForSingleItem()" and "GClass1969.smethod_0()"
     public getBuyoutPriceForSingleItem(item: Item, itemCount: number, isFence: boolean, basePriceSrc?: Record<string, number>): number
     {
@@ -824,8 +812,8 @@ class BrokerPriceManager
      * 
      * but...
      * 
-     * Can be used to always keep item prices up to date, but it's usage wouldn't make sense,
-     * because it's more performance intensive and you could for example buy off all specific 
+     * Can be used to always keep item prices up to date, but perhaps it's usage wouldn't make sense,
+     * because it's more performance intensive and you could, for example, buy off all specific 
      * item offers and the received price would be based off Static or Dynamic price, which is
      * less accurate that an actual average price based on existing offers.
      * @param itemTplId Item Template Id.

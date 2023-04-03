@@ -163,7 +163,7 @@ export class BrokerTradeController extends TradeController
                             pmcData.RagfairInfo.isRatingGrowing = true;
                             pmcData.RagfairInfo.rating += ratingIncrease;
                             verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}(Flea Market): Flea rep increased to ${pmcData.RagfairInfo.rating} (+${ratingIncrease})`
+                                `${logPrefix} ${tReqData.traderName}: Flea rep increased to ${pmcData.RagfairInfo.rating} (+${ratingIncrease})`
                             );
     
                             // Usually flea operations increase the salesSum of a hidden "ragfair" trader, it's simulated here
