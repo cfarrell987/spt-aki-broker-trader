@@ -157,7 +157,7 @@ export class BrokerTradeController extends TradeController
                         if (tReqData.isFleaMarket)
                         {
                             // Use total price, since the tax doesn't count towards flea rep.
-                            // You get 0.01 rep per 50 000 RUB sold. 
+                            // By default - you get 0.01 rep per 50 000 RUB sold. 
                             const repGain = this.ragfairConfig.sell.reputation.gain;
                             const ratingIncrease = tReqData.totalPrice * repGain;
                             pmcData.RagfairInfo.isRatingGrowing = true;
@@ -168,23 +168,22 @@ export class BrokerTradeController extends TradeController
     
                             // Usually flea operations increase the salesSum of a hidden "ragfair" trader, it's simulated here
                             // I think it's probably unnecessary to show it in the logs since salesSum also includes your purchases from flea (tested).
-                            const profileChange = tradeResponse?.profileChanges[sessionID] as ProfileChange;
-                            if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
-                            const currFleaRelations = pmcData.TradersInfo["ragfair"];
-                            if (currFleaRelations == undefined) throw ("Couldn't get current Flea Market relations from user profile. Maybe you haven't traded on flea yet? Notify the developer about this.")
-                            // this.logger.log(`${JSON.stringify(pmcData._id)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(sessionID)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(tradeResponse)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(currFleaRelations)}`, LogTextColor.RED);
-                            
-                            profileChange.traderRelations["ragfair"] = {
-                                disabled: currFleaRelations.disabled,
-                                loyaltyLevel: currFleaRelations.loyaltyLevel,
-                                salesSum: currFleaRelations.salesSum + tReqData.totalPrice,
-                                standing: currFleaRelations.standing,
-                                nextResupply: currFleaRelations.nextResupply,
-                                unlocked: currFleaRelations.unlocked
-                            }
+                            pmcData.TradersInfo["ragfair"].salesSum += tReqData.totalPrice; // add to the sales sum for consistency
+
+                            // - Changing "profileChanges" doesn't seem to work.
+                            //
+                            // const profileChange = tradeResponse?.profileChanges[sessionID] as ProfileChange;
+                            // if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
+                            // const currFleaRelations = pmcData.TradersInfo["ragfair"];
+                            // if (currFleaRelations == undefined) throw ("Couldn't get current Flea Market relations from user profile. Maybe you haven't traded on flea yet? Notify the developer about this.")
+                            // profileChange.traderRelations["ragfair"] = {
+                            //     disabled: currFleaRelations.disabled,
+                            //     loyaltyLevel: currFleaRelations.loyaltyLevel,
+                            //     salesSum: currFleaRelations.salesSum + tReqData.totalPrice,
+                            //     standing: currFleaRelations.standing,
+                            //     nextResupply: currFleaRelations.nextResupply,
+                            //     unlocked: currFleaRelations.unlocked
+                            // }
                         }
                         verboseLogger.log(`${logPrefix} ${tReqData.traderName} RESPONSE DUMP: ${JSON.stringify(tradeResponse)}`, LogTextColor.CYAN);
                         responses.push(tradeResponse);
