@@ -55,6 +55,17 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
             throw (`${this.mod} Config error. "profitCommissionPercentage" out of range [0-99]`);
         }
 
+        if (modCfg.buyRateDollar < 0 || modCfg.buyRateEuro < 0)
+        {
+            this.logger.explicitError(`[${this.mod}] Config error! One of currencies "buyRate", is less than 0.`)
+            throw (`${this.mod} Config error. A currency "buyRate" must be a positive number.`);
+        }
+
+        if (!(modCfg["useClientPlugin"] ?? true)) // hidden config property check
+        {
+            this.logger.explicitWarning(`[${this.mod}] Warning! Using this mod with "useClientPlugin": false is not directly supported. Price inaccuracies are expected. If you encounted serious problems(features completely not functioning, endless loadings, server exceptions etc.), please inform the developer directly.`);
+        }
+
         const preAkiModLoader: PreAkiModLoader = container.resolve<PreAkiModLoader>("PreAkiModLoader");
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");
         const configServer = container.resolve<ConfigServer>("ConfigServer");
@@ -110,6 +121,12 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
             brokerBase.items_buy.category = brokerBase.items_buy.category.concat(trader.base.items_buy.category);
             brokerBase.items_buy.id_list = brokerBase.items_buy.id_list.concat(trader.base.items_buy.id_list);
         }
+        // Init currency exchange
+        if (modCfg.buyRateDollar > 0) brokerBase.items_buy.id_list.push(Money.DOLLARS);
+        else brokerBase.items_buy_prohibited.id_list.push(Money.DOLLARS);
+        if (modCfg.buyRateEuro > 0) brokerBase.items_buy.id_list.push(Money.EUROS);
+        else brokerBase.items_buy_prohibited.id_list.push(Money.EUROS);
+        
         // Add new trader to the trader dictionary in DatabaseServer
         this.addTraderToDb(baseJson, tables, jsonUtil, container);
 
@@ -194,8 +211,8 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         }
 
         const traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
-        const dollarsId = "5696686a4bdc2da3298b456a";
-        const eurosId = "569668774bdc2da2298b4568";
+        const dollarsId = Money.DOLLARS;
+        const eurosId = Money.EUROS;
 
         // Get USD and EUR prices from PK and Skier assorts
         const pkAssort = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER);
@@ -204,11 +221,11 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
 
         const skiAssort = traderHelper.getTraderAssortsById(Traders.SKIER);
         const skiEurItemId = skiAssort.items.find(item => item._tpl === eurosId)._id;
-        const skiEuroPrices = skiAssort.barter_scheme[skiEurItemId][0][0].count;
+        const skiEuroPrice = skiAssort.barter_scheme[skiEurItemId][0][0].count;
         
         // View function documentation for what all the parameters are
         this.addSingleItemToAssort(assortTable, dollarsId, true, 9999999, 1, Money.ROUBLES, pkDollarPrice);
-        this.addSingleItemToAssort(assortTable, eurosId, true, 9999999, 1, Money.ROUBLES, skiEuroPrices);
+        this.addSingleItemToAssort(assortTable, eurosId, true, 9999999, 1, Money.ROUBLES, skiEuroPrice);
 
         // Get the mp133 preset and add to the traders assort (Could make your own Items[] array, doesnt have to be presets)
         // const mp133GunPreset = tables.globals.ItemPresets["584148f2245977598f1ad387"]._items;

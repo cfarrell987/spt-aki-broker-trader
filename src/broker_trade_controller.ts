@@ -29,6 +29,10 @@ import { BrokerPriceManager } from "./broker_price_manager";
 import { VerboseLogger } from "./verbose_logger";
 import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
 import { LogBackgroundColor } from "@spt-aki/models/spt/logging/LogBackgroundColor";
+import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBuyTradeRequestData";
+import { Money } from "@spt-aki/models/enums/Money";
+import { Traders } from "@spt-aki/models/enums/Traders";
+import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 
 @injectable()
 export class BrokerTradeController extends TradeController
@@ -57,6 +61,27 @@ export class BrokerTradeController extends TradeController
             if (body.tid === baseJson._id)
             {
                 const logPrefix = `[${modInfo.name} ${modInfo.version}]`;        
+                if (body.type === "buy_from_trader")
+                {
+                    // Redirect currency purchases to corresponding traders
+                    const buyRequestData = body as IProcessBuyTradeRequestData;
+                    const traderHelper = BrokerPriceManager.instance.container.resolve<TraderHelper>(TraderHelper.name);
+                    const brokerAssort = traderHelper.getTraderAssortsById(BrokerPriceManager.brokerTraderId);
+                    const brokerUsdItem = brokerAssort.items.find(item => item._tpl === Money.DOLLARS)._id;
+                    const brokerEurItem = brokerAssort.items.find(item => item._tpl === Money.EUROS)._id;
+
+                    if (buyRequestData.item_id === brokerUsdItem)
+                    {
+                        buyRequestData.tid = Traders.PEACEKEEPER;
+                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER).items.find(item => item._tpl === Money.DOLLARS)._id;
+                    }
+                    if (buyRequestData.item_id === brokerEurItem)
+                    {
+                        buyRequestData.tid = Traders.SKIER;
+                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.SKIER).items.find(item => item._tpl === Money.EUROS)._id
+                    } 
+                    // Let it skip to the super.confirmTrading call at the bottom.
+                }
                 if (body.type === "sell_to_trader") 
                 {
                     const priceManager = BrokerPriceManager.instance;
@@ -65,6 +90,7 @@ export class BrokerTradeController extends TradeController
                     const container = priceManager.container; 
                     const verboseLogger = new VerboseLogger(container);
                     const sellRequestBody = body as IProcessSellTradeRequestData;
+                    const traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
                     const handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name);
 
                     // Logging. Shouldn't be executed during normal use, since it additionally searches for items in player inventory by id.
@@ -78,15 +104,24 @@ export class BrokerTradeController extends TradeController
                     const responses: IItemEventRouterResponse[] = [];
                     const sellReqDataPerTrader = priceManager.processSellRequestDataForMostProfit(pmcData, sellRequestBody);
 
+                    // traderId used for grouping, so may contain brokerTraderId(valid trader id) and brokerCurrencyExchangeId(not a valid trader id)
+                    // prefer tReqData.requestBody.tid for actual valid trader id.
                     for (const traderId in sellReqDataPerTrader)
                     {
                         const tReqData = sellReqDataPerTrader[traderId];
                         const tradeResponse = super.confirmTrading(pmcData, tReqData.requestBody, sessionID, foundInRaid, upd);
-    
+                        
+                        // Make sales sum increase unaffected by commission.
+                        // commission is converted to trader currency(don't use commissionInRoubles)
+                        if (!BrokerPriceManager.isBroker(traderId))
+                        {
+                            pmcData.TradersInfo[tReqData.requestBody.tid].salesSum += tReqData.commission;
+                        }
+
                         // Logging section
                         if (tReqData.isFleaMarket)
                         {
-                            let profitMsg = `${logPrefix} ${tReqData.traderName}(Flea Market): Sold ${tReqData.fullItemCount} items. `+ 
+                            let profitMsg = `${logPrefix} ${tReqData.traderName}: Sold ${tReqData.fullItemCount} items. `+ 
                             `Profit: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)} RUB (`+
                             `Price: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalPrice)} RUB | `+
                             `Tax: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalTax)} RUB).`;
@@ -106,7 +141,7 @@ export class BrokerTradeController extends TradeController
                                 profitMsg += ` (In ${tCurrency}: ${BrokerPriceManager.getNumberWithSpaces(tReqData.totalProfit)})`;
                             }
                             profitMsg += ".";
-                            if (modConfig.profitCommissionPercentage > 0)
+                            if (modConfig.profitCommissionPercentage > 0 && tReqData.commissionInRoubles > 0) // no need for commission log when it's 0 (e.g. currency exhange)
                             {
                                 profitMsg += ` Commission: ${tReqData.commissionInRoubles} RUB`;
                                 if (tCurrency !== "RUB")
@@ -122,34 +157,33 @@ export class BrokerTradeController extends TradeController
                         if (tReqData.isFleaMarket)
                         {
                             // Use total price, since the tax doesn't count towards flea rep.
-                            // You get 0.01 rep per 50 000 RUB sold. 
+                            // By default - you get 0.01 rep per 50 000 RUB sold. 
                             const repGain = this.ragfairConfig.sell.reputation.gain;
                             const ratingIncrease = tReqData.totalPrice * repGain;
                             pmcData.RagfairInfo.isRatingGrowing = true;
                             pmcData.RagfairInfo.rating += ratingIncrease;
                             verboseLogger.explicitSuccess(
-                                `${logPrefix} ${tReqData.traderName}(Flea Market): Flea rep increased to ${pmcData.RagfairInfo.rating} (+${ratingIncrease})`
+                                `${logPrefix} ${tReqData.traderName}: Flea rep increased to ${pmcData.RagfairInfo.rating} (+${ratingIncrease})`
                             );
     
                             // Usually flea operations increase the salesSum of a hidden "ragfair" trader, it's simulated here
                             // I think it's probably unnecessary to show it in the logs since salesSum also includes your purchases from flea (tested).
-                            const profileChange = tradeResponse?.profileChanges[sessionID] as ProfileChange;
-                            if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
-                            const currFleaRelations = pmcData.TradersInfo["ragfair"];
-                            if (currFleaRelations == undefined) throw ("Couldn't get current Flea Market relations from user profile. Maybe you haven't traded on flea yet? Notify the developer about this.")
-                            // this.logger.log(`${JSON.stringify(pmcData._id)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(sessionID)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(tradeResponse)}`, LogTextColor.RED);
-                            // this.logger.log(`${JSON.stringify(currFleaRelations)}`, LogTextColor.RED);
-                            
-                            profileChange.traderRelations["ragfair"] = {
-                                disabled: currFleaRelations.disabled,
-                                loyaltyLevel: currFleaRelations.loyaltyLevel,
-                                salesSum: currFleaRelations.salesSum + tReqData.totalPrice,
-                                standing: currFleaRelations.standing,
-                                nextResupply: currFleaRelations.nextResupply,
-                                unlocked: currFleaRelations.unlocked
-                            }
+                            pmcData.TradersInfo["ragfair"].salesSum += tReqData.totalPrice; // add to the sales sum for consistency
+
+                            // - Changing "profileChanges" doesn't seem to work.
+                            //
+                            // const profileChange = tradeResponse?.profileChanges[sessionID] as ProfileChange;
+                            // if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
+                            // const currFleaRelations = pmcData.TradersInfo["ragfair"];
+                            // if (currFleaRelations == undefined) throw ("Couldn't get current Flea Market relations from user profile. Maybe you haven't traded on flea yet? Notify the developer about this.")
+                            // profileChange.traderRelations["ragfair"] = {
+                            //     disabled: currFleaRelations.disabled,
+                            //     loyaltyLevel: currFleaRelations.loyaltyLevel,
+                            //     salesSum: currFleaRelations.salesSum + tReqData.totalPrice,
+                            //     standing: currFleaRelations.standing,
+                            //     nextResupply: currFleaRelations.nextResupply,
+                            //     unlocked: currFleaRelations.unlocked
+                            // }
                         }
                         verboseLogger.log(`${logPrefix} ${tReqData.traderName} RESPONSE DUMP: ${JSON.stringify(tradeResponse)}`, LogTextColor.CYAN);
                         responses.push(tradeResponse);
@@ -167,6 +201,8 @@ export class BrokerTradeController extends TradeController
                     return mergedResponse;
                 }
             }
+            //console.log(`TRADING TYPE: ${body.Action}`);
+            //console.log(`BUYREQ DUMP: ${JSON.stringify(body)}`)
             return super.confirmTrading(pmcData, body, sessionID, foundInRaid, upd);
         }
         catch (error) 

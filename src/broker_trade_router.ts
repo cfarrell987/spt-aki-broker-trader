@@ -39,6 +39,13 @@ export class BrokerTraderRouter
                     }
                 },
                 {
+                    url: "/broker-trader/get/currency-base-prices",
+                    action: (url, info, sessionId, output) =>
+                    {
+                        return this.respondGetCurrencyBasePrices();
+                    }
+                },
+                {
                     url: "/broker-trader/get/supported-trader-ids",
                     action: (url, info, sessionId, output) =>
                     {
@@ -68,12 +75,20 @@ export class BrokerTraderRouter
     private static respondGetModConfig(): IGetBodyResponseData<any>
     {
         return this.http.getBody({
+            BuyRateDollar: modCfg.buyRateDollar,
+            BuyRateEuro: modCfg.buyRateEuro,
             ProfitCommissionPercentage: modCfg.profitCommissionPercentage,
             UseRagfair: modCfg.useRagfair,
             RagfairIgnoreAttachments: modCfg.ragfairIgnoreAttachments, 
             RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
             RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel 
         });
+    }
+
+    private static respondGetCurrencyBasePrices(): IGetBodyResponseData<Record<string, number>>
+    {
+
+        return this.http.getBody<Record<string, number>>(BrokerPriceManager.instance.currencyBasePrices);
     }
 
     private static respondGetSupportedTraderIds(): IGetBodyResponseData<string[]>
