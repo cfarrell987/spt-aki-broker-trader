@@ -4,15 +4,13 @@ import { RagfairServerHelper } from "@spt-aki/helpers/RagfairServerHelper";
 import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
 import { IHandbookBase } from "@spt-aki/models/eft/common/tables/IHandbookBase";
 import { ITemplateItem } from "@spt-aki/models/eft/common/tables/ITemplateItem";
-import { IItemBuyData, ITrader } from "@spt-aki/models/eft/common/tables/ITrader";
+import { ITrader } from "@spt-aki/models/eft/common/tables/ITrader";
 import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
 import { Traders } from "@spt-aki/models/enums/Traders"
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
-import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
 import { DependencyContainer, container as tsyringeContainer } from "tsyringe";
 import { Item } from "@spt-aki/models/eft/common/tables/IItem";
 import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
-import { RagfairTaxHelper } from "@spt-aki/helpers/RagfairTaxHelper";
 import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
 
 import baseJson from "../db/base.json";
@@ -26,29 +24,11 @@ import { PaymentHelper } from "@spt-aki/helpers/PaymentHelper";
 import { MemberCategory } from "@spt-aki/models/enums/MemberCategory";
 import { Money } from "@spt-aki/models/enums/Money";
 import { PresetHelper } from "@spt-aki/helpers/PresetHelper";
-import { RagfairController } from "@spt-aki/controllers/RagfairController";
-import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
-import { ItemComponentHelper, ItemComponentTypes, ItemPointsData } from "./item_component_helper";
+import { ItemComponentHelper } from "./item_component_helper";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
-
-interface BrokerPriceManagerCache
-{
-    tradersMetaData: TradersMetaData;
-    itemRagfairPriceTable: Record<string, number>;
-}
-
-interface BrokerSellData
-{
-    ItemId: string;
-    TraderId: string;
-    Price: number;
-    PriceInRoubles: number;
-    Commission: number;
-    CommissionInRoubles: number;
-    Tax: number;
-}
-
-class BrokerPriceManager 
+import { TradersMetaData, BrokerSellData, BrokerPriceManagerCache, TraderMetaData, SellDecision, ProcessedSellData } from "./broker_price_manager_types";
+import { ItemComponentTypes, ItemPointsData } from "./item_component_helper_types";
+export class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
 
@@ -951,54 +931,3 @@ class BrokerPriceManager
     //     return this.ragfairTaxHelper.calculateTax(item, pmcData, requirementsValue, offerItemCount, sellInOnePiece);
     // }
 }
-
-interface SellDecision 
-{
-    // trader: TraderBaseData; unnecessary
-    traderId: string;
-    price: number;
-    priceInRoubles: number;
-    commission: number;
-    commissionInRoubles: number;
-    tax?: number;
-}
-interface TraderMetaData
-{
-    id: string;
-    name: string;
-    currency: string;
-    itemsBuy: IItemBuyData;
-    itemsBuyProhibited: IItemBuyData;
-    buyPriceCoef: number;
-}
-
-interface TradersMetaData 
-{
-    [traderId: string]: TraderMetaData
-}
-
-/**
- * Processed sell data per trader.
- */
-// Sort of has a little bit of unnecessary data,
-// but that helps calculating the flea rep change
-// inside the controler, and also log some info.
-interface ProcessedSellData
-{
-    [traderId: string]: {
-        isFleaMarket: boolean;
-        traderName: string;
-        totalPrice: number;
-        totalTax: number;
-        totalProfit: number;
-        totalProfitInRoubles: number;
-        commission: number;
-        commissionInRoubles: number;
-        totalItemCount: number;
-        totalStackObjectsCount: number;
-        fullItemCount: number;
-        requestBody: IProcessSellTradeRequestData;
-    }
-}
-
-export {BrokerPriceManager}
