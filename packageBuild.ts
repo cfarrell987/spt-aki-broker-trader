@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // SPT-AKI mods folder path
-const sptAkiMods = "D:/SPT-AKI/SPTARKOV 3.5.3/user/mods";
-const sptAkiBepinex = "D:/SPT-AKI/SPTARKOV 3.5.3/BepInEx/plugins";
+const sptAkiMods = "D:/SPT-AKI/SPTARKOV 3.5.5/user/mods";
+const sptAkiBepinex = "D:/SPT-AKI/SPTARKOV 3.5.5/BepInEx/plugins";
 const pluginPath = "client-side/BrokerTraderPlugin/bin/Debug/net472";
 const pluginName = "BrokerTraderPlugin.dll";
 

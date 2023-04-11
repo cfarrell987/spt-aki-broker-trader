@@ -3,15 +3,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ItemPrice = TraderClass.GStruct219;
-using CurrencyHelper = GClass2179;
-using PriceHelper = GClass1969;
-using RepairKitComponent = GClass2384;
+//using CurrencyHelper = GClass2182; // now use BrokerTraderPlugin.CurrencyHelper instead of generic class reference
+//using PriceHelper = GClass1972; //GClass1969; // now use BrokerTraderPlugin.PriceHelper instead of generic class reference
+using RepairKitComponent = GClass2387; //GClass2384;
 using EFT;
 using UnityEngine;
 using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
 using Comfort.Common;
+using HarmonyLib;
 
 namespace BrokerTraderPlugin
 {
@@ -94,7 +95,7 @@ namespace BrokerTraderPlugin
 
     internal static class PriceManager
     {
-        public const string BROKER_TRADER_ID = "broker-trader-id"; // Currency ex. Broker tid is handled serverside.
+        public const string BROKER_TRADER_ID = "broker-trader-id"; // "Currency ex. Broker tid" is handled serverside.
         public static ISession Session { get; set; }
         public static ModConfig ModConfig { get; set; }
         public static BackendConfigSettingsClass BackendCfg { get; set; }
@@ -315,7 +316,7 @@ namespace BrokerTraderPlugin
             }
             // Moved it from the first spot in the order to the last one, since it's some sort of multiplier.
             BuffComponent buffComponent;
-            BackendConfigSettingsClass.GClass1301.GClass1303 gclass;
+            BackendConfigSettingsClass.GClass1304.GClass1306 gclass; //BackendConfigSettingsClass.GClass1301.GClass1303 gclass;
             if (item.TryGetItemComponent(out buffComponent) && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings != null && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings.TryGetValue(buffComponent.BuffType, out gclass))
             {
                 requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * (double)gclass.PriceModifier;
