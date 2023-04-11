@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BrokerTraderPlugin
+namespace BrokerTraderPlugin.Reflections
 {
     /// <summary>
     /// A dynamic reflection of a potential "PriceHelper" class to avoid generic referencing.
@@ -18,6 +18,7 @@ namespace BrokerTraderPlugin
         public static Type classType;
         static PriceHelper()
         {
+            // use AccessTools.AllAssemblies() or AllTypes()?
             var assembly = Assembly.GetAssembly(typeof(TarkovApplication));
             // Find the static class
             classType = AccessTools.GetTypesFromAssembly(assembly).FirstOrDefault(type =>

@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ItemPrice = TraderClass.GStruct219;
+//using ItemPrice = TraderClass.GStruct219;
 //using CurrencyHelper = GClass2182; // now use BrokerTraderPlugin.CurrencyHelper instead of generic class reference
 //using PriceHelper = GClass1972; //GClass1969; // now use BrokerTraderPlugin.PriceHelper instead of generic class reference
 using RepairKitComponent = GClass2387; //GClass2384;
@@ -13,6 +13,9 @@ using Aki.Common.Utils;
 using Newtonsoft.Json;
 using Comfort.Common;
 using HarmonyLib;
+using System.Reflection;
+using System.Diagnostics;
+using BrokerTraderPlugin.Reflections;
 
 namespace BrokerTraderPlugin
 {
@@ -37,16 +40,15 @@ namespace BrokerTraderPlugin
         [JsonProperty("data")]
         public T Data { get; private set; }
     }
-
     internal readonly struct TraderItemPriceData
     {
         public readonly string TraderId { get; }
-        public readonly ItemPrice? Price { get; }
+        public readonly object Price { get; }
         public readonly int Amount { get; }
         public readonly int AmountInRoubles { get; }
         public readonly int Commission { get; }
         public readonly int CommissionInRoubles { get; }
-        public TraderItemPriceData(string traderId, ItemPrice? price, int amount = -1, int amountInRoubles = -1, int commission = 0, int commissionInRoubles = 0)
+        public TraderItemPriceData(string traderId, object price, int amount = -1, int amountInRoubles = -1, int commission = 0, int commissionInRoubles = 0)
         {
             TraderId = traderId;
             Price = price;
@@ -59,11 +61,11 @@ namespace BrokerTraderPlugin
 
     internal readonly struct RagfairItemPriceData
     {
-        public readonly ItemPrice? Price { get; }
+        public readonly object Price { get; }
         public readonly int RequirementsAmount { get; }
         public readonly int Tax { get; }
         public readonly int Commission { get; }
-        public RagfairItemPriceData(ItemPrice? price, int requirementsAmount, int tax = 0, int commission = 0)
+        public RagfairItemPriceData(object price, int requirementsAmount, int tax = 0, int commission = 0)
         {
             Price = price;
             RequirementsAmount = requirementsAmount;
@@ -149,8 +151,8 @@ namespace BrokerTraderPlugin
             if (TradersList == null || TradersList?.Count() < 1)
             {
                 const string msg = "Trying to PriceManager.getBestPrice while tradersList is empty, this shouldn't happen!";
-                Debug.LogError(msg);
-                throw (new Exception(msg));
+                //Debug.LogError(msg); doesn't seem to work
+                throw new Exception(msg);
             }
 
             // Explicitly assign Broker to currencies
@@ -162,7 +164,7 @@ namespace BrokerTraderPlugin
                 if (item.TemplateId == CurrencyHelper.DOLLAR_ID) amount *= ModConfig.BuyRateDollar;
                 if (item.TemplateId == CurrencyHelper.EURO_ID) amount *= ModConfig.BuyRateEuro;
                 int roundedAmount = Convert.ToInt32(Math.Round(amount));
-                return new TraderItemPriceData(BROKER_TRADER_ID, new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, roundedAmount)), roundedAmount, roundedAmount, 0, 0);
+                return new TraderItemPriceData(BROKER_TRADER_ID, ItemPrice.createInstance(CurrencyHelper.ROUBLE_ID, roundedAmount), roundedAmount, roundedAmount, 0, 0);
             }
 
             // Look for highest paying trader, but get price in roubles,
@@ -184,7 +186,9 @@ namespace BrokerTraderPlugin
         {
             if (SupplyData[trader.Id] == null)
             {
-                Debug.LogError("supplyData is null");
+                // Debug.LogError("supplyData is null"); doesn't seem to work
+                // use long duration, infinite is unneeded.
+                NotificationManagerClass.DisplayWarningNotification("BrokerTrader error! GetTraderItemPriceData - supplyData is null", EFT.Communications.ENotificationDurationType.Long);
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
             if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader.Id, null, -1, -1);
@@ -203,7 +207,7 @@ namespace BrokerTraderPlugin
             {
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            return new TraderItemPriceData(trader.Id, new ItemPrice?(new ItemPrice(currencyId, finalAmount - commission)), finalAmount, amountInRoubles, commission, commissionInRoubles);
+            return new TraderItemPriceData(trader.Id, ItemPrice.createInstance(currencyId, finalAmount - commission), finalAmount, amountInRoubles, commission, commissionInRoubles);
         }
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
@@ -244,7 +248,7 @@ namespace BrokerTraderPlugin
             int commission = Convert.ToInt32(Math.Round(amount * ModConfig.ProfitCommissionPercentage / 100));
 
 
-            return new RagfairItemPriceData(new ItemPrice?(new ItemPrice(CurrencyHelper.ROUBLE_ID, amount - tax - commission)), amount, tax, commission);
+            return new RagfairItemPriceData(ItemPrice.createInstance(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
         }
 
         public static double GetSingleRagfairItemPriceData(Item item)
@@ -280,51 +284,51 @@ namespace BrokerTraderPlugin
             //    requirementsPrice *= (double)dogtagComponent.Level;
             //}
             KeyComponent keyComponent;
-            if (item.TryGetItemComponent<KeyComponent>(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
+            if (item.TryGetItemComponent(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
             {
                 // IMPORTANT
                 // keyComponent.NumberOfUsages <- actually means TIMES USED, so to get NumberOfUsages "left" subtract this from MaximumNumberOfUsage
                 //
                 // bruh
-                requirementsPrice = requirementsPrice / (double)keyComponent.Template.MaximumNumberOfUsage * (double)(keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
+                requirementsPrice = requirementsPrice / keyComponent.Template.MaximumNumberOfUsage * (keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
 
             }
             ResourceComponent resourceComponent;
-            if (item.TryGetItemComponent<ResourceComponent>(out resourceComponent) && resourceComponent.MaxResource > 0f)
+            if (item.TryGetItemComponent(out resourceComponent) && resourceComponent.MaxResource > 0f)
             {
                 requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)resourceComponent.MaxResource * (double)resourceComponent.Value;
             }
             SideEffectComponent sideEffectComponent;
-            if (item.TryGetItemComponent<SideEffectComponent>(out sideEffectComponent) && sideEffectComponent.MaxResource > 0f)
+            if (item.TryGetItemComponent(out sideEffectComponent) && sideEffectComponent.MaxResource > 0f)
             {
                 requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)sideEffectComponent.MaxResource * (double)sideEffectComponent.Value;
             }
             MedKitComponent medKitComponent;
-            if (item.TryGetItemComponent<MedKitComponent>(out medKitComponent))
+            if (item.TryGetItemComponent(out medKitComponent))
             {
-                requirementsPrice = requirementsPrice / (double)medKitComponent.MaxHpResource * (double)medKitComponent.HpResource;
+                requirementsPrice = requirementsPrice / medKitComponent.MaxHpResource * medKitComponent.HpResource;
             }
             FoodDrinkComponent foodDrinkComponent;
-            if (item.TryGetItemComponent<FoodDrinkComponent>(out foodDrinkComponent))
+            if (item.TryGetItemComponent(out foodDrinkComponent))
             {
-                requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * (double)foodDrinkComponent.HpPercent;
+                requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * foodDrinkComponent.HpPercent;
             }
             RepairKitComponent repairKitComponent;
-            if ((repairKitComponent = (item as RepairKitComponent)) != null)
+            if ((repairKitComponent = item as RepairKitComponent) != null)
             {
-                requirementsPrice = requirementsPrice / (double)repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
+                requirementsPrice = requirementsPrice / repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
             }
             // Moved it from the first spot in the order to the last one, since it's some sort of multiplier.
             BuffComponent buffComponent;
             BackendConfigSettingsClass.GClass1304.GClass1306 gclass; //BackendConfigSettingsClass.GClass1301.GClass1303 gclass;
             if (item.TryGetItemComponent(out buffComponent) && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings != null && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings.TryGetValue(buffComponent.BuffType, out gclass))
             {
-                requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * (double)gclass.PriceModifier;
+                requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * gclass.PriceModifier;
             }
             requirementsPrice *= item.StackObjectsCount;
             return requirementsPrice;
         }
-        public static ItemPrice? GetBestItemPrice(Item item)
+        public static object GetBestItemPrice(Item item)
         {
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
@@ -358,8 +362,8 @@ namespace BrokerTraderPlugin
         {
             if (body.Error != 0)
             {
-                Debug.LogError(message);
-                throw (new Exception(message));
+                //Debug.LogError(message); doesn't seem to work
+                throw new Exception(message);
             }
         }
     }

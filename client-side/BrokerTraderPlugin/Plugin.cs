@@ -1,6 +1,7 @@
 ﻿using Aki.Common.Http;
 using BepInEx;
 using BrokerPatch;
+using BrokerTraderPlugin.Reflections;
 using System;
 using System.Runtime.CompilerServices;
 
@@ -17,8 +18,9 @@ namespace BrokerTraderPlugin
             {
                 // Initialize PriceManager as early as possible, to let it collect data it needs from the server.
                 RuntimeHelpers.RunClassConstructor(typeof(PriceManager).TypeHandle);
+                // V-V-V Implement useClientPlugin here V-V-V
                 RuntimeHelpers.RunClassConstructor(typeof(CurrencyHelper).TypeHandle);
-                new PatchMerchantsList().Enable(); // Should be first to pull trader list and some other data into PriceManage.
+                new PatchMerchantsList().Enable(); // Should be first to pull trader list and some other data into PriceManager.
                 if (PriceManager.ModConfig.UseRagfair)
                 {
                     new PatchRefreshRagfairOnTraderScreenShow().Enable(); // Refresh ragfair prices before opening Broker trader screen

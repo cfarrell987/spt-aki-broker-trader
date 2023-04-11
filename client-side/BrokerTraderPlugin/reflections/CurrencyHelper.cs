@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BrokerTraderPlugin
+namespace BrokerTraderPlugin.Reflections
 {
     /// <summary>
     /// A dynamic reflection of a potential "CurrencyHelper" class to avoid generic referencing.
@@ -21,6 +21,7 @@ namespace BrokerTraderPlugin
         public static readonly string EURO_ID;
         static CurrencyHelper()
         {
+            // use AccessTools.AllAssemblies() or AllTypes()?
             var assembly = Assembly.GetAssembly(typeof(TarkovApplication));
             // Find the static class
             classType = AccessTools.GetTypesFromAssembly(assembly).FirstOrDefault(type =>

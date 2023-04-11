@@ -7,7 +7,7 @@ using System.Linq;
 using System.Reflection;
 using Aki.Common.Http;
 
-using ItemPrice = TraderClass.GStruct219;
+//using ItemPrice = TraderClass.GStruct219;
 //using CurrencyHelper = GClass2182; // old was GClass2179 // now use BrokerTraderPlugin.CurrencyHelper instead of generic class reference
 
 using Aki.Common.Utils;
@@ -18,6 +18,7 @@ using System.Text.RegularExpressions;
 using Comfort.Common;
 using HarmonyLib;
 using System;
+using BrokerTraderPlugin.Reflections;
 
 namespace BrokerPatch
 {
@@ -61,7 +62,7 @@ namespace BrokerPatch
         }
 
         [PatchPostfix]
-        private static void PatchPostfix(ref TraderClass __instance, Item item, ref ItemPrice? __result)
+        private static void PatchPostfix(ref TraderClass __instance, Item item, ref object __result)
         {
             // Only affect the Broker
             if (__instance.Id == BROKER_TRADER_ID)
@@ -104,14 +105,15 @@ namespace BrokerPatch
                 var _equivalentSumValue = typeof(TraderDealScreen).GetField("_equivalentSumValue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TextMeshProUGUI;
                 if (trader.Id == BROKER_TRADER_ID)
                 {
-                    List<ItemPrice?> source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
+                    // source is a list of ItemPrices, reference ItemPriceReflection.
+                    var source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
                     if (!source.Any()) _equivalentSumValue.text = "";
                     else
                     {
-                        var groupByCurrency = source.GroupBy(price => price.GetValueOrDefault().CurrencyId).Select(currencyGroup => new
+                        var groupByCurrency = source.GroupBy(ItemPrice.getCurrencyId).Select(currencyGroup => new
                         {
                             CurrencyId = currencyGroup.Key,
-                            Amount = currencyGroup.Sum(price => price.GetValueOrDefault().Amount),
+                            Amount = currencyGroup.Sum(ItemPrice.getAmount),
                         });
                         // Rouble amount has to be always first. Since Broker's main currency is RUB.
                         _equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
