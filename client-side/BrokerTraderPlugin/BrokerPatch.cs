@@ -7,8 +7,8 @@ using System.Linq;
 using System.Reflection;
 using Aki.Common.Http;
 
-//using ItemPrice = TraderClass.GStruct219;
-//using CurrencyHelper = GClass2182; // old was GClass2179 // now use BrokerTraderPlugin.CurrencyHelper instead of generic class reference
+//using ItemPrice = TraderClass.GStruct219; // now use BrokerTraderPlugin.Reflections.ItemPrice instead of generic struct reference
+//using CurrencyHelper = GClass2182; // old was GClass2179 // now use BrokerTraderPlugin.Reflections.CurrencyHelper instead of generic class reference
 
 using Aki.Common.Utils;
 

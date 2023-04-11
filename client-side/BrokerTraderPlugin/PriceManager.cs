@@ -2,19 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-//using ItemPrice = TraderClass.GStruct219;
-//using CurrencyHelper = GClass2182; // now use BrokerTraderPlugin.CurrencyHelper instead of generic class reference
-//using PriceHelper = GClass1972; //GClass1969; // now use BrokerTraderPlugin.PriceHelper instead of generic class reference
-using RepairKitComponent = GClass2387; //GClass2384;
+//using ItemPrice = TraderClass.GStruct219; // now use BrokerTraderPlugin.Reflections.ItemPrice instead of generic struct reference
+//using CurrencyHelper = GClass2182; // now use BrokerTraderPlugin.Reflections.CurrencyHelper instead of generic class reference
+//using PriceHelper = GClass1972; //GClass1969; // now use BrokerTraderPlugin.Reflections.PriceHelper instead of generic class reference
+//using RepairKitComponent = GClass2387; //GClass2384; // not used since GetSingleItemBuyoutPrice is used for ragfair price calculation.
 using EFT;
 using UnityEngine;
 using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
-using Comfort.Common;
-using HarmonyLib;
-using System.Reflection;
-using System.Diagnostics;
 using BrokerTraderPlugin.Reflections;
 
 namespace BrokerTraderPlugin
@@ -95,6 +91,23 @@ namespace BrokerTraderPlugin
         }
     }
 
+    internal class RagfairPrices : IBasePriceSource
+    {
+        public readonly Dictionary<string, double> PriceTable;
+        public RagfairPrices(Dictionary<string, double> priceTable)
+        {
+            PriceTable = priceTable;
+        }
+        public double GetBasePrice(string itemTplId)
+        {
+            return PriceTable[itemTplId];
+        }
+        public bool ContainsItem(string itemTplId)
+        {
+            return PriceTable.ContainsKey(itemTplId);
+        }
+    }
+
     internal static class PriceManager
     {
         public const string BROKER_TRADER_ID = "broker-trader-id"; // "Currency ex. Broker tid" is handled serverside.
@@ -102,7 +115,7 @@ namespace BrokerTraderPlugin
         public static ModConfig ModConfig { get; set; }
         public static BackendConfigSettingsClass BackendCfg { get; set; }
         public static readonly string[] SupportedTraderIds = new string[0];
-        public static Dictionary<string, double> ItemRagfairPriceTable { get; set; } = new Dictionary<string, double>();
+        public static readonly RagfairPrices RagfairPriceSource;
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
         public static Dictionary<string, double> CurrencyBasePrices { get; set; } = new Dictionary<string, double>();
@@ -131,7 +144,7 @@ namespace BrokerTraderPlugin
             response = RequestHandler.GetJson("/broker-trader/get/item-ragfair-price-table");
             var ragfairTableBody = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
             ThrowIfErrorResponseBody(ragfairTableBody, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
-            ItemRagfairPriceTable = ragfairTableBody.Data;
+            RagfairPriceSource = new RagfairPrices(ragfairTableBody.Data);
 
             // Request SupplyData from default SPT-AKI server route
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
@@ -251,82 +264,18 @@ namespace BrokerTraderPlugin
             return new RagfairItemPriceData(ItemPrice.createInstance(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
         }
 
+        // using CalculateBuyoutPrice from PriceHelper would help with reflection.
         public static double GetSingleRagfairItemPriceData(Item item)
         {
             //if (!isFoundInRaid(item) || !isRagfairUnlocked() || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return new RagfairItemPriceData(-1, -1, null);
             // !ItemRagfairPriceTable.ContainsKey(item.TemplateId) - checks if item not blacklisted.
             // Should be correct since the look-up table provided by the server contains only non-blacklisted items.
-            if (!isFoundInRaid(item) || !isRagfairUnlocked() || !ItemRagfairPriceTable.ContainsKey(item.TemplateId) /*|| item.CanSellOnRagfair*/) return -1;
+            if (!isFoundInRaid(item) || !isRagfairUnlocked() || !RagfairPriceSource.ContainsItem(item.TemplateId) /*|| item.CanSellOnRagfair*/) return -1;
 
-            // Basically base price(avg flea price)
-            // Will be overwritten.
-            double requirementsPrice = ItemRagfairPriceTable[item.TemplateId];
-
-            RepairableComponent repairableComponent;
-            if (item.TryGetItemComponent(out repairableComponent))
-            {
-                // - Will be useful when Repairable prices on flea will start accounting all this
-                //
-                //double num2 = 0.01 * Math.Pow(0.0, (double)repairableComponent.MaxDurability);
-                //float num3 = Mathf.Ceil(repairableComponent.MaxDurability);
-                //float num4 = (float)item.RepairCost * (num3 - (float)Mathf.CeilToInt(repairableComponent.Durability));
-                //requirementsPrice = requirementsPrice * ((double)(num3 / (float)repairableComponent.TemplateDurability) + num2) - (double)num4;
-
-                // - As of SPT-AKI 3.5.3 Repairable items only seems to change based on current Durability, not anything else.
-                //
-                requirementsPrice = requirementsPrice / repairableComponent.TemplateDurability * repairableComponent.Durability;
-                // Same goes for every other item.
-            }
-
-            //DogtagComponent dogtagComponent;
-            //if (item.TryGetItemComponent<DogtagComponent>(out dogtagComponent))
-            //{
-            //    requirementsPrice *= (double)dogtagComponent.Level;
-            //}
-            KeyComponent keyComponent;
-            if (item.TryGetItemComponent(out keyComponent) && keyComponent.Template.MaximumNumberOfUsage > 0)
-            {
-                // IMPORTANT
-                // keyComponent.NumberOfUsages <- actually means TIMES USED, so to get NumberOfUsages "left" subtract this from MaximumNumberOfUsage
-                //
-                // bruh
-                requirementsPrice = requirementsPrice / keyComponent.Template.MaximumNumberOfUsage * (keyComponent.Template.MaximumNumberOfUsage - keyComponent.NumberOfUsages);
-
-            }
-            ResourceComponent resourceComponent;
-            if (item.TryGetItemComponent(out resourceComponent) && resourceComponent.MaxResource > 0f)
-            {
-                requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)resourceComponent.MaxResource * (double)resourceComponent.Value;
-            }
-            SideEffectComponent sideEffectComponent;
-            if (item.TryGetItemComponent(out sideEffectComponent) && sideEffectComponent.MaxResource > 0f)
-            {
-                requirementsPrice = requirementsPrice * 0.1 + requirementsPrice * 0.9 / (double)sideEffectComponent.MaxResource * (double)sideEffectComponent.Value;
-            }
-            MedKitComponent medKitComponent;
-            if (item.TryGetItemComponent(out medKitComponent))
-            {
-                requirementsPrice = requirementsPrice / medKitComponent.MaxHpResource * medKitComponent.HpResource;
-            }
-            FoodDrinkComponent foodDrinkComponent;
-            if (item.TryGetItemComponent(out foodDrinkComponent))
-            {
-                requirementsPrice = requirementsPrice / (double)foodDrinkComponent.MaxResource * foodDrinkComponent.HpPercent;
-            }
-            RepairKitComponent repairKitComponent;
-            if ((repairKitComponent = item as RepairKitComponent) != null)
-            {
-                requirementsPrice = requirementsPrice / repairKitComponent.MaxRepairResource * (double)Math.Max(repairKitComponent.Resource, 1f);
-            }
-            // Moved it from the first spot in the order to the last one, since it's some sort of multiplier.
-            BuffComponent buffComponent;
-            BackendConfigSettingsClass.GClass1304.GClass1306 gclass; //BackendConfigSettingsClass.GClass1301.GClass1303 gclass;
-            if (item.TryGetItemComponent(out buffComponent) && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings != null && Singleton<BackendConfigSettingsClass>.Instance.RepairSettings.ItemEnhancementSettings.TryGetValue(buffComponent.BuffType, out gclass))
-            {
-                requirementsPrice *= 1.0 + Math.Abs(buffComponent.Value - 1.0) * gclass.PriceModifier;
-            }
-            requirementsPrice *= item.StackObjectsCount;
-            return requirementsPrice;
+            // When zero is used as "itemsCount" param - StackObjectsCount is used.
+            // isFence has to be true, to ignore component restrictions(durability, resource, etc.)
+            // RagfairPriceSource is used as IBasePriceSource object, it will be used as base price source instead of handbook.
+            return PriceHelper.CalculateBuyoutBasePriceForSingleItem(item, 0, RagfairPriceSource, true);
         }
         public static object GetBestItemPrice(Item item)
         {

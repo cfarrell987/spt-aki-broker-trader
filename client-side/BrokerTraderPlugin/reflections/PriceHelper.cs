@@ -38,6 +38,11 @@ namespace BrokerTraderPlugin.Reflections
             return (double)AccessTools.Method(classType, "CalculateBasePriceForAllItems").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
         }
 
+        public static double CalculateBuyoutBasePriceForSingleItem(Item item, int itemsCount, IBasePriceSource basePriceSource, bool isFence)
+        {
+            return (double)AccessTools.Method(classType, "CalculateBuyoutBasePriceForSingleItem").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
+        }
+
         public static double CalculateTaxPrice(Item item, int offerItemCount, double requirementsPrice, bool sellInOnePiece)
         {
             return (double)AccessTools.Method(classType, "CalculateTaxPrice").Invoke(null, new object[] { item, offerItemCount, requirementsPrice, sellInOnePiece });
