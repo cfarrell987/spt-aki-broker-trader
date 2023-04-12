@@ -312,7 +312,8 @@ export class BrokerPriceManager
     public canBeSoldToTrader(pmcData: IPmcData, item: Item, traderId: string): boolean
     {
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
-        return !itemAndChildren.some(item => !this.canTemplateBeSoldToTrader(item._tpl, traderId) || !this.passesBuyoutRestrictions(item, traderId === Traders.FENCE));
+        return !itemAndChildren.some(item => !this.canTemplateBeSoldToTrader(item._tpl, traderId) || !this.passesBuyoutRestrictions(item, traderId === Traders.FENCE))
+            && (pmcData?.TradersInfo[traderId]?.unlocked ?? false); // default being false seems logical, but might change to true if needed
     }
 
     /**

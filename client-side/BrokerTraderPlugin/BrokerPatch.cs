@@ -21,6 +21,7 @@ using System;
 using BrokerTraderPlugin.Reflections;
 using UnityEngine;
 using static UnityEngine.RemoteConfigSettingsHelper;
+using UnityEngine.UIElements;
 
 namespace BrokerPatch
 {
@@ -38,7 +39,17 @@ namespace BrokerPatch
             // Get supported TraderClass instancess to work with.
             try
             {
-                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id));
+                // - Can also be used to filter for Unlocked traders, but the second variant seems to work fine so far.
+                //TradersList = tradersList.Where((trader) =>
+                //{
+                //    if (!session.Profile.TradersInfo.ContainsKey(trader.Id)) return false;
+                //    return SupportedTraderIds.Contains(trader.Id) && session.Profile.TradersInfo[trader.Id].Unlocked;
+                //});
+                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && trader.Info.Unlocked);
+                foreach (var trader in TradersList)
+                {
+                    Logger.LogError($"TRADER LISTING: {trader.LocalizedName}");
+                }
                 //Session = Traverse.Create(__instance).Fields().Select(fName => AccessTools.Field(typeof(MerchantsList), fName)).FirstOrDefault(field => field.FieldType == typeof(ISession)).GetValue(__instance) as ISession;
                 //Session = typeof(MerchantsList).GetField("ginterface128_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as ISession;
                 Session = session; // session is actually one of the args, bruh
