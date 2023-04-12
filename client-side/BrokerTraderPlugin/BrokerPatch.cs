@@ -20,6 +20,7 @@ using HarmonyLib;
 using System;
 using BrokerTraderPlugin.Reflections;
 using UnityEngine;
+using static UnityEngine.RemoteConfigSettingsHelper;
 
 namespace BrokerPatch
 {
@@ -62,27 +63,50 @@ namespace BrokerPatch
             return typeof(TraderClass).GetMethod("GetUserItemPrice", BindingFlags.Instance | BindingFlags.Public);
         }
 
-        [PatchPostfix]
-        private static void PatchPostfix(ref TraderClass __instance, Item item, ref object __result)
+        // Use prefix patch to save already miserable Tarkov UI performance.
+        // The old postfix implementation is kept commented as a back-up/reference.
+        [PatchPrefix]
+        private static bool PatchPrefix(ref TraderClass __instance, Item item, ref object __result)
         {
             // Only affect the Broker
             if (__instance.Id == BROKER_TRADER_ID)
             {
-                if (__result != null)
+                try
                 {
-                    try
-                    {
-                        __result = GetBestItemPrice(item);
-                    }
-                    catch (Exception ex)
-                    {
-                        var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
-                        Logger.LogError(msg);
-                        NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
-                    }
+                    __result = GetBestItemPrice(item);
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                    Logger.LogError(msg);
+                    NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
                 }
             }
+            return true;
         }
+
+        //[PatchPostfix]
+        //private static void PatchPostfix(ref TraderClass __instance, Item item, ref object __result)
+        //{
+        //    // Only affect the Broker
+        //    if (__instance.Id == BROKER_TRADER_ID)
+        //    {
+        //        if (__result != null)
+        //        {
+        //            try
+        //            {
+        //                __result = GetBestItemPrice(item);
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+        //                Logger.LogError(msg);
+        //                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+        //            }
+        //        }
+        //    }
+        //}
     }
     //  Change how total transaction sum is generated when selling to trader.
     public class PatchEquivalentSum : ModulePatch
@@ -120,10 +144,10 @@ namespace BrokerPatch
                     if (!source.Any()) _equivalentSumValue.text = "";
                     else
                     {
-                        var groupByCurrency = source.GroupBy(ItemPrice.getCurrencyId).Select(currencyGroup => new
+                        var groupByCurrency = source.GroupBy(ItemPrice.GetCurrencyId).Select(currencyGroup => new
                         {
                             CurrencyId = currencyGroup.Key,
-                            Amount = currencyGroup.Sum(ItemPrice.getAmount),
+                            Amount = currencyGroup.Sum(ItemPrice.GetAmount),
                         });
                         // Rouble amount has to be always first. Since Broker's main currency is RUB.
                         _equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
@@ -205,28 +229,37 @@ namespace BrokerPatch
                         {
                             var groupByTrader = sellData.Select(entry => entry.Value).GroupBy(data => data.TraderId);
                             Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))"); // format thousands with spaces
+                            //int traderNameSpacing = Math.Max(groupByTrader.Max(group => $"{group.Key} Nickname".Localized().Length), "Flea Market".Length);
+                            string ragfairLocale = "";
+                            foreach (var word in "RAG FAIR".Localized().Split(' '))
+                            {
+                                ragfairLocale += char.ToUpper(word[0]) + word.Substring(1) + " ";
+                            }
+                            ragfairLocale.Trim();
                             string message = "\nReputation changes:\n\n";
                             foreach (var group in groupByTrader.Where(group => group.Key != BROKER_TRADER_ID))
                             {
                                 int totalPrice = group.Sum(data => data.Price);
                                 string currencyChar = CurrencyHelper.GetCurrencyChar(TradersList.First(trader => trader.Id == group.First().TraderId).Settings.Currency);
-
-                                message += $"{$"{group.Key} Nickname".Localized()}: + {currencyChar} {regex.Replace(totalPrice.ToString(), " ")}\n\n";
+                                message += $"    \u2022    {$"{group.Key} Nickname".Localized()}:    + {currencyChar} {regex.Replace(totalPrice.ToString(), " ")}\n\n";
+                                //message += string.Format("{0,-" + traderNameSpacing + "}:   + {1} {2}\n\n", $"{group.Key} Nickname".Localized(), currencyChar, regex.Replace(totalPrice.ToString(), " "));
                             }
                             // For Broker Trader - show flea rep increment
                             foreach (var group in groupByTrader.Where(group => group.Key == BROKER_TRADER_ID))
                             {
                                 int totalPrice = group.Where(item => !CurrencyHelper.IsCurrencyId(soldItems.First(soldItem => soldItem.Id == item.ItemId).TemplateId)).Sum(item => item.Price);
+                                if (totalPrice < 1) break; // if no "non-currency" items just break out of the loop
                                 string currencyChar = CurrencyHelper.GetCurrencyChar(ECurrencyType.RUB);
                                 string repIncStr = (totalPrice * RagfairSellRepGain).ToString();
                                 // add a space 2 digits after the floating point for better contextual readability
-                                message += $"Flea Market: +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
+                                message += $"    \u2022    {ragfairLocale}:    +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
+                                //message += string.Format("{0,-" + traderNameSpacing + "}:   +{1}\n\n", "Flea Market", repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " "));
                             }
                             NotificationManagerClass.DisplayMessageNotification(
                                 message,
-                                EFT.Communications.ENotificationDurationType.Long,
+                                ModNotificationDuration,
                                 EFT.Communications.ENotificationIconType.RagFair,
-                                Color.green
+                                Color.white
                             );
                         }
                     }

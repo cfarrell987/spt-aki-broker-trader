@@ -93,6 +93,7 @@ export class BrokerTraderRouter
             RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
             RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel,
             UseNotifications: modCfg.useNotifications,
+            NotificationsLongerDuration: modCfg.notificationsLongerDuration,
             UseClientPlugin: modCfg.useClientPlugin ?? true
         });
     }

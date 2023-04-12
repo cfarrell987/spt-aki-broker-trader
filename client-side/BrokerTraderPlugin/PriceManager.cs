@@ -12,6 +12,7 @@ using Aki.Common.Http;
 using Aki.Common.Utils;
 using Newtonsoft.Json;
 using BrokerTraderPlugin.Reflections;
+using EFT.Communications;
 
 namespace BrokerTraderPlugin
 {
@@ -25,6 +26,7 @@ namespace BrokerTraderPlugin
         public bool RagfairIgnoreFoundInRaid { get; set; }
         public bool RagfairIgnorePlayerLevel { get; set; }
         public bool UseNotifications { get; set; }
+        public bool NotificationsLongerDuration { get; set; }
         public bool UseClientPlugin { get; set; }
     }
 
@@ -115,6 +117,7 @@ namespace BrokerTraderPlugin
         public const string BROKER_TRADER_ID = "broker-trader-id"; // "Currency ex. Broker tid" is handled serverside.
         public static ISession Session { get; set; }
         public static ModConfig ModConfig { get; set; }
+        public static readonly ENotificationDurationType ModNotificationDuration;
         public static BackendConfigSettingsClass BackendCfg { get; set; }
         public static readonly string[] SupportedTraderIds = new string[0];
         public static readonly RagfairPrices RagfairPriceSource;
@@ -130,7 +133,7 @@ namespace BrokerTraderPlugin
             var modCfgBody = Json.Deserialize<ResponseBody<ModConfig>>(response);
             ThrowIfErrorResponseBody(modCfgBody, $"[BROKER TRADER] Couldn't get Mod Config!");
             ModConfig = modCfgBody.Data;
-
+            ModNotificationDuration = ModConfig.NotificationsLongerDuration ? ENotificationDurationType.Long : ENotificationDurationType.Default;
             // Request PK and Skier USD/EUR prices
             response = RequestHandler.GetJson(Routes.GetCurrencyBasePrices);
             var currencyBasePricesData = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
@@ -178,15 +181,14 @@ namespace BrokerTraderPlugin
             }
 
             // Explicitly assign Broker to currencies
-            // No need to check for Roubles since plugin only affets ItemPrice? where not NULL
             // So accepted items are governed by base.json, or setup in the mod.ts.
-            if (CurrencyHelper.IsCurrencyId(item.TemplateId))
+            if (CurrencyHelper.IsCurrencyId(item.TemplateId) && item.TemplateId != CurrencyHelper.ROUBLE_ID)
             {
                 double amount = CurrencyBasePrices[item.TemplateId] * item.StackObjectsCount;
                 if (item.TemplateId == CurrencyHelper.DOLLAR_ID) amount *= ModConfig.BuyRateDollar;
                 if (item.TemplateId == CurrencyHelper.EURO_ID) amount *= ModConfig.BuyRateEuro;
                 int roundedAmount = Convert.ToInt32(Math.Round(amount));
-                return new TraderItemPriceData(BROKER_TRADER_ID, ItemPrice.createInstance(CurrencyHelper.ROUBLE_ID, roundedAmount), roundedAmount, roundedAmount, 0, 0);
+                return new TraderItemPriceData(BROKER_TRADER_ID, ItemPrice.Constructor(CurrencyHelper.ROUBLE_ID, roundedAmount), roundedAmount, roundedAmount, 0, 0);
             }
 
             // Look for highest paying trader, but get price in roubles,
@@ -229,7 +231,7 @@ namespace BrokerTraderPlugin
             {
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            return new TraderItemPriceData(trader.Id, ItemPrice.createInstance(currencyId, finalAmount - commission), finalAmount, amountInRoubles, commission, commissionInRoubles);
+            return new TraderItemPriceData(trader.Id, ItemPrice.Constructor(currencyId, finalAmount - commission), finalAmount, amountInRoubles, commission, commissionInRoubles);
         }
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
@@ -270,7 +272,7 @@ namespace BrokerTraderPlugin
             int commission = Convert.ToInt32(Math.Round(amount * ModConfig.ProfitCommissionPercentage / 100));
 
 
-            return new RagfairItemPriceData(ItemPrice.createInstance(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
+            return new RagfairItemPriceData(ItemPrice.Constructor(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
         }
 
         // using CalculateBuyoutPrice from PriceHelper would help with reflection.

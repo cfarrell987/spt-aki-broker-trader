@@ -32,17 +32,17 @@ namespace BrokerTraderPlugin.Reflections
         }
 
         // Invoke a constructor to create an ItemPrice object.
-        public static object createInstance(string currencyId, int amount)
+        public static object Constructor(string currencyId, int amount)
         {
             return structConstructor.Invoke(new object[] { currencyId, amount });
         }
 
-        public static string getCurrencyId(object instance)
+        public static string GetCurrencyId(object instance)
         {
             return AccessTools.Field(structType, CurrencyId).GetValue(instance) as string;
         }
 
-        public static int getAmount(object instance)
+        public static int GetAmount(object instance)
         {
             return (int)AccessTools.Field(structType, Amount).GetValue(instance);
         }

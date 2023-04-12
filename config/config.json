@@ -4,12 +4,13 @@
     },
     "buyRateDollar": 1,
     "buyRateEuro": 1,
-    "profitCommissionPercentage": 3,
+    "profitCommissionPercentage": 0,
     "useRagfair": true,
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
-    "useCache": false,
     "useNotifications": true,
+    "notificationsLongerDuration": false,
+    "useCache": false,
     "useClientPlugin": true
 }
