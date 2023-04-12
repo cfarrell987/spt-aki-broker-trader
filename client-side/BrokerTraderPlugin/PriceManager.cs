@@ -24,6 +24,8 @@ namespace BrokerTraderPlugin
         public bool RagfairIgnoreAttachments { get; set; }
         public bool RagfairIgnoreFoundInRaid { get; set; }
         public bool RagfairIgnorePlayerLevel { get; set; }
+        public bool UseNotifications { get; set; }
+        public bool UseClientPlugin { get; set; }
     }
 
     [Serializable]
@@ -116,6 +118,7 @@ namespace BrokerTraderPlugin
         public static BackendConfigSettingsClass BackendCfg { get; set; }
         public static readonly string[] SupportedTraderIds = new string[0];
         public static readonly RagfairPrices RagfairPriceSource;
+        public static readonly double RagfairSellRepGain;
         public static IEnumerable<TraderClass> TradersList { get; set; } = null;
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
         public static Dictionary<string, double> CurrencyBasePrices { get; set; } = new Dictionary<string, double>();
@@ -155,6 +158,12 @@ namespace BrokerTraderPlugin
                 ThrowIfErrorResponseBody(body, $"[BROKER TRADER] Couldn't get prices for traderId {traderId}");
                 SupplyData.Add(traderId, body.Data);
             }
+
+            // Request Ragfair Config Sell Rep Gain
+            response = RequestHandler.GetJson(Routes.GetRagfairSellRepGain);
+            var sellRepGainBody = Json.Deserialize<ResponseBody<double>>(response);
+            ThrowIfErrorResponseBody(sellRepGainBody, $"[BROKER TRADER] Couldn't get Ragfair Sell Rep Gain!");
+            RagfairSellRepGain = sellRepGainBody.Data;
         }
         // Gets the best paying trader and his price data.
         public static TraderItemPriceData GetBestTraderPriceData(Item item)

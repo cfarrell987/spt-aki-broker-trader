@@ -41,6 +41,11 @@ namespace BrokerTraderPlugin.Reflections
             return AccessTools.Method(classType, "GetCurrencyCharById").Invoke(null, new object[] { templateId }) as string;
         }
 
+        public static string GetCurrencyChar(ECurrencyType currencyType)
+        {
+            return AccessTools.Method(classType, "GetCurrencyChar").Invoke(null, new object[] { currencyType }) as string;
+        }
+
         public static string GetCurrencyId(ECurrencyType currencyType)
         {
             return AccessTools.Method(classType, "GetCurrencyId").Invoke(null, new object[] { currencyType }) as string;

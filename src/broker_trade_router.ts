@@ -8,6 +8,9 @@ import modInfo from "../package.json";
 import modCfg from "../config/config.json";
 import { VerboseLogger } from "./verbose_logger";
 import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
+import { IRagfairConfig } from "@spt-aki/models/spt/config/IRagfairConfig";
+import { ConfigServer } from "@spt-aki/servers/ConfigServer";
+import { ConfigTypes } from "@spt-aki/models/enums/ConfigTypes";
 
 export class BrokerTraderRouter
 {
@@ -66,6 +69,13 @@ export class BrokerTraderRouter
                         //console.log(`[BROKER] ${JSON.stringify(info)}`);
                         return this.respondPostSoldItemsData(info);
                     }
+                },
+                {
+                    url: "/broker-trader/get/ragfair-sell-rep-gain",
+                    action: (url, info, sessionId, output) =>
+                    {
+                        return this.respondGetRagfairSellRepGain();
+                    }
                 }
             ],
             "broker-trader"
@@ -81,7 +91,9 @@ export class BrokerTraderRouter
             UseRagfair: modCfg.useRagfair,
             RagfairIgnoreAttachments: modCfg.ragfairIgnoreAttachments, 
             RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
-            RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel 
+            RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel,
+            UseNotifications: modCfg.useNotifications,
+            UseClientPlugin: modCfg.useClientPlugin ?? true
         });
     }
 
@@ -105,5 +117,12 @@ export class BrokerTraderRouter
     {
         BrokerPriceManager.instance.setClientBrokerPriceData(info);
         return this.http.emptyResponse(); // Response is not really processed in the client in any way.
+    }
+
+    private static respondGetRagfairSellRepGain(): IGetBodyResponseData<number>
+    {
+        const configServer = this.container.resolve<ConfigServer>(ConfigServer.name);
+        const ragfairConfig: IRagfairConfig = configServer.getConfig(ConfigTypes.RAGFAIR);
+        return this.http.getBody<number>(ragfairConfig.sell.reputation.gain);
     }
 }

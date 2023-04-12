@@ -18,16 +18,18 @@ namespace BrokerTraderPlugin
             {
                 // Initialize PriceManager as early as possible, to let it collect data it needs from the server.
                 RuntimeHelpers.RunClassConstructor(typeof(PriceManager).TypeHandle);
-                // V-V-V Implement useClientPlugin here V-V-V
-                RuntimeHelpers.RunClassConstructor(typeof(CurrencyHelper).TypeHandle);
-                new PatchMerchantsList().Enable(); // Should be first to pull trader list and some other data into PriceManager.
-                if (PriceManager.ModConfig.UseRagfair)
+                if (PriceManager.ModConfig.UseClientPlugin)
                 {
-                    new PatchRefreshRagfairOnTraderScreenShow().Enable(); // Refresh ragfair prices before opening Broker trader screen
+                    RuntimeHelpers.RunClassConstructor(typeof(CurrencyHelper).TypeHandle);
+                    new PatchMerchantsList().Enable(); // Should be first to pull trader list and some other data into PriceManager.
+                    if (PriceManager.ModConfig.UseRagfair)
+                    {
+                        new PatchRefreshRagfairOnTraderScreenShow().Enable(); // Refresh ragfair prices before opening Broker trader screen
+                    }
+                    new PatchSendDataOnDealButtonPress().Enable(); // Send client item data to server when user presses "DEAL!".
+                    new PatchEquivalentSum().Enable(); // Selling money equivalent(total sell profit) patch.
+                    new PatchGetUserItemPrice().Enable(); // Individual item price display.
                 }
-                new PatchSendDataOnDealButtonPress().Enable(); // Send client item data to server when user presses "DEAL!".
-                new PatchEquivalentSum().Enable(); // Selling money equivalent(total sell profit) patch.
-                new PatchGetUserItemPrice().Enable(); // Individual item price display.
             }
             catch (Exception ex)
             {

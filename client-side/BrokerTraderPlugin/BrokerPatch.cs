@@ -19,6 +19,7 @@ using Comfort.Common;
 using HarmonyLib;
 using System;
 using BrokerTraderPlugin.Reflections;
+using UnityEngine;
 
 namespace BrokerPatch
 {
@@ -90,7 +91,7 @@ namespace BrokerPatch
         {
             // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
             // method_10 is still the same for 3.5.5. Identifying by CIL instructions could be used but that a pretty unnecessary stretch.
-            
+
             // The original method_10 has several properties to distinct it:
             // * GetMethodBody().MaxStackSize == 4
             // * LocalVariables.Count = 2 
@@ -195,8 +196,39 @@ namespace BrokerPatch
                     var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList();
                     if (soldItems.Count > 0)
                     {
-                        Dictionary<string, BrokerItemSellData> sellData = soldItems.Select(GetBrokerItemSellData).ToDictionary(data => data.ItemId);
+                        var itemsSellData = soldItems.Select(GetBrokerItemSellData);
+                        // Send sell data to server
+                        Dictionary<string, BrokerItemSellData> sellData = itemsSellData.ToDictionary(data => data.ItemId);
                         RequestHandler.PostJson(Routes.PostSoldItemsData, Json.Serialize(sellData));
+                        // Show notifications for reputation increments.
+                        if (PriceManager.ModConfig.UseNotifications)
+                        {
+                            var groupByTrader = sellData.Select(entry => entry.Value).GroupBy(data => data.TraderId);
+                            Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))"); // format thousands with spaces
+                            string message = "\nReputation changes:\n\n";
+                            foreach (var group in groupByTrader.Where(group => group.Key != BROKER_TRADER_ID))
+                            {
+                                int totalPrice = group.Sum(data => data.Price);
+                                string currencyChar = CurrencyHelper.GetCurrencyChar(TradersList.First(trader => trader.Id == group.First().TraderId).Settings.Currency);
+
+                                message += $"{$"{group.Key} Nickname".Localized()}: + {currencyChar} {regex.Replace(totalPrice.ToString(), " ")}\n\n";
+                            }
+                            // For Broker Trader - show flea rep increment
+                            foreach (var group in groupByTrader.Where(group => group.Key == BROKER_TRADER_ID))
+                            {
+                                int totalPrice = group.Where(item => !CurrencyHelper.IsCurrencyId(soldItems.First(soldItem => soldItem.Id == item.ItemId).TemplateId)).Sum(item => item.Price);
+                                string currencyChar = CurrencyHelper.GetCurrencyChar(ECurrencyType.RUB);
+                                string repIncStr = (totalPrice * RagfairSellRepGain).ToString();
+                                // add a space 2 digits after the floating point for better contextual readability
+                                message += $"Flea Market: +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
+                            }
+                            NotificationManagerClass.DisplayMessageNotification(
+                                message,
+                                EFT.Communications.ENotificationDurationType.Long,
+                                EFT.Communications.ENotificationIconType.RagFair,
+                                Color.green
+                            );
+                        }
                     }
                 }
             }

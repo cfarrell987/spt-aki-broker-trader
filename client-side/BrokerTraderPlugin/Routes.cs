@@ -8,6 +8,7 @@
         public const string GetCurrencyBasePrices = "/broker-trader/get/currency-base-prices";
         public const string GetSupportedTraderIds = "/broker-trader/get/supported-trader-ids";
         public const string GetItemRagfairPriceTable = "/broker-trader/get/item-ragfair-price-table";
+        public const string GetRagfairSellRepGain = "/broker-trader/get/ragfair-sell-rep-gain";
         // Default SPT-AKI routes
         public const string ClientItemsPrices = "/client/items/prices";
 

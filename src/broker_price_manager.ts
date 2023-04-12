@@ -358,7 +358,7 @@ export class BrokerPriceManager
     public getBestSellDecisionForItem(pmcData: IPmcData, item: Item): SellDecision
     {
         // Client data is very important for accuracy 
-        if (this._clientBrokerSellData[item._id] != undefined)
+        if (this._clientBrokerSellData[item._id] != undefined && modConfig.useClientPlugin)
         {
             //console.log(`[BROKER] RECEIVED SELL DATA FROM CLIENT FOR ${item._id}`);
             const clientSellData = this._clientBrokerSellData[item._id];
