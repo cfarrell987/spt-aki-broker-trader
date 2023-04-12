@@ -90,7 +90,16 @@ namespace BrokerPatch
         {
             // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
             // method_10 is still the same for 3.5.5. Identifying by CIL instructions could be used but that a pretty unnecessary stretch.
-            return typeof(TraderDealScreen).GetMethod("method_10", BindingFlags.Instance | BindingFlags.NonPublic);
+            
+            // The original method_10 has several properties to distinct it:
+            // * GetMethodBody().MaxStackSize == 4
+            // * LocalVariables.Count = 2 
+            // * One(first) of the variables is an "ItemPrice" generic structure (in 3.5.5. a TraderClass.GStruct219).
+            // For now dynamically reaching this method is possible by simply checking if it has a variable of generic "ItemPrice" structure type.
+            // Later this might be changed for more precision. IL code checks are still a last resort.
+            var method = AccessTools.GetDeclaredMethods(typeof(TraderDealScreen)).Where(method => method.GetMethodBody().LocalVariables.Any(variable => variable.LocalType == ItemPrice.structType)).FirstOrDefault();
+            if (method == null) throw new Exception("PatchEquivalentSum. Couldn't find the method by reflection.");
+            return method;
         }
 
         [PatchPostfix]
@@ -187,7 +196,7 @@ namespace BrokerPatch
                     if (soldItems.Count > 0)
                     {
                         Dictionary<string, BrokerItemSellData> sellData = soldItems.Select(GetBrokerItemSellData).ToDictionary(data => data.ItemId);
-                        RequestHandler.PostJson("/broker-trader/post/sold-items-data", Json.Serialize(sellData));
+                        RequestHandler.PostJson(Routes.PostSoldItemsData, Json.Serialize(sellData));
                     }
                 }
             }

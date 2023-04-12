@@ -123,25 +123,25 @@ namespace BrokerTraderPlugin
         static PriceManager()
         {
             // Request config
-            string response = RequestHandler.GetJson("/broker-trader/get/mod-config");
+            string response = RequestHandler.GetJson(Routes.GetModConfig);
             var modCfgBody = Json.Deserialize<ResponseBody<ModConfig>>(response);
             ThrowIfErrorResponseBody(modCfgBody, $"[BROKER TRADER] Couldn't get Mod Config!");
             ModConfig = modCfgBody.Data;
 
             // Request PK and Skier USD/EUR prices
-            response = RequestHandler.GetJson("/broker-trader/get/currency-base-prices");
+            response = RequestHandler.GetJson(Routes.GetCurrencyBasePrices);
             var currencyBasePricesData = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
             ThrowIfErrorResponseBody(currencyBasePricesData, $"[BROKER TRADER] Couldn't get Currency Base Prices!");
             CurrencyBasePrices = currencyBasePricesData.Data;
 
             // Request supported trader ids
-            response = RequestHandler.GetJson("/broker-trader/get/supported-trader-ids");
+            response = RequestHandler.GetJson(Routes.GetSupportedTraderIds);
             var supportedTradersBody = Json.Deserialize<ResponseBody<string[]>>(response);
             ThrowIfErrorResponseBody(supportedTradersBody, $"[BROKER TRADER] Couldn't get SupportedTraderIds!");
             SupportedTraderIds = supportedTradersBody.Data;
 
             // Request ragfair item price table.
-            response = RequestHandler.GetJson("/broker-trader/get/item-ragfair-price-table");
+            response = RequestHandler.GetJson(Routes.GetItemRagfairPriceTable);
             var ragfairTableBody = Json.Deserialize<ResponseBody<Dictionary<string, double>>>(response);
             ThrowIfErrorResponseBody(ragfairTableBody, $"[BROKER TRADER] Couldn't get Item Ragfair Price Table!");
             RagfairPriceSource = new RagfairPrices(ragfairTableBody.Data);
@@ -150,7 +150,7 @@ namespace BrokerTraderPlugin
             // Path example -> /client/items/prices/54cb57776803fa99248b456e
             foreach (string traderId in SupportedTraderIds)
             {
-                response = RequestHandler.GetJson($"/client/items/prices/{traderId}");
+                response = RequestHandler.GetJson($"{Routes.ClientItemsPrices}/{traderId}");
                 ResponseBody<SupplyData> body = Json.Deserialize<ResponseBody<SupplyData>>(response);
                 ThrowIfErrorResponseBody(body, $"[BROKER TRADER] Couldn't get prices for traderId {traderId}");
                 SupplyData.Add(traderId, body.Data);
