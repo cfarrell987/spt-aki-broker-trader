@@ -247,7 +247,8 @@ namespace BrokerPatch
                                 ragfairLocale += char.ToUpper(word[0]) + word.Substring(1) + " ";
                             }
                             ragfairLocale.Trim();
-                            string message = "\nReputation changes:\n\n";
+                            const string messageInitVal = "\nReputation changes:\n\n";
+                            string message = messageInitVal;
                             foreach (var group in groupByTrader.Where(group => group.Key != BROKER_TRADER_ID))
                             {
                                 int totalPrice = group.Sum(data => data.Price);
@@ -266,12 +267,15 @@ namespace BrokerPatch
                                 message += $"    \u2022    {ragfairLocale}:    +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
                                 //message += string.Format("{0,-" + traderNameSpacing + "}:   +{1}\n\n", "Flea Market", repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " "));
                             }
-                            NotificationManagerClass.DisplayMessageNotification(
-                                message,
-                                ModNotificationDuration,
-                                EFT.Communications.ENotificationIconType.RagFair,
-                                Color.white
-                            );
+                            if (message != messageInitVal)
+                            {
+                                NotificationManagerClass.DisplayMessageNotification(
+                                    message,
+                                    ModNotificationDuration,
+                                    EFT.Communications.ENotificationIconType.RagFair,
+                                    Color.white
+                                );
+                            }
                         }
                     }
                 }
