@@ -46,10 +46,10 @@ namespace BrokerPatch
                 //    return SupportedTraderIds.Contains(trader.Id) && session.Profile.TradersInfo[trader.Id].Unlocked;
                 //});
                 TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && trader.Info.Unlocked);
-                foreach (var trader in TradersList)
-                {
-                    Logger.LogError($"TRADER LISTING: {trader.LocalizedName}");
-                }
+                //foreach (var trader in TradersList)
+                //{
+                //    Logger.LogError($"TRADER LISTING: {trader.LocalizedName}");
+                //}
                 //Session = Traverse.Create(__instance).Fields().Select(fName => AccessTools.Field(typeof(MerchantsList), fName)).FirstOrDefault(field => field.FieldType == typeof(ISession)).GetValue(__instance) as ISession;
                 //Session = typeof(MerchantsList).GetField("ginterface128_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as ISession;
                 Session = session; // session is actually one of the args, bruh
