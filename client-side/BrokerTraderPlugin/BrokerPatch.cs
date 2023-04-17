@@ -61,6 +61,7 @@ namespace BrokerPatch
                 var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during MerchantsList patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
                 NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                throw ex;
             }
         }
     }
@@ -79,22 +80,23 @@ namespace BrokerPatch
         [PatchPrefix]
         private static bool PatchPrefix(ref TraderClass __instance, Item item, ref object __result)
         {
-            // Only affect the Broker
-            if (__instance.Id == BROKER_TRADER_ID)
+            try
             {
-                try
+                // Only affect the Broker
+                if (__instance.Id == BROKER_TRADER_ID)
                 {
                     __result = GetBestItemPrice(item);
                     return false;
                 }
-                catch (Exception ex)
-                {
-                    var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
-                    Logger.LogError(msg);
-                    NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
-                }
+                return true;
             }
-            return true;
+            catch (Exception ex)
+            {
+                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                Logger.LogError(msg);
+                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                throw ex;
+            }
         }
 
         //[PatchPostfix]
@@ -176,6 +178,7 @@ namespace BrokerPatch
                 var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during EquivalentSum patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
                 NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                throw ex;
             }
         }
     }
@@ -203,6 +206,7 @@ namespace BrokerPatch
                 var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during RefreshRagfairOnTraderScreenShow patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
                 NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                throw ex;
             }
         }
     }
@@ -285,6 +289,7 @@ namespace BrokerPatch
                 var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during SendDataOnDealButtonPress patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
                 NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                throw ex;
             }
         }
 

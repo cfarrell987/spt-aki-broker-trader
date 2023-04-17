@@ -34,6 +34,7 @@ namespace BrokerTraderPlugin
             catch (Exception ex)
             {
                 Logger.LogError($"Error! {PluginInfo.PLUGIN_GUID} threw an exception while loading, perhaps due to version incompatibility. Exception message: {ex.Message}");
+                throw ex;
             }
         }
     }
