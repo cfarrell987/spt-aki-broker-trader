@@ -13,6 +13,7 @@ using Aki.Common.Utils;
 using Newtonsoft.Json;
 using BrokerTraderPlugin.Reflections;
 using EFT.Communications;
+using BrokerTraderPlugin.Reflections.Extensions;
 
 namespace BrokerTraderPlugin
 {
@@ -188,7 +189,7 @@ namespace BrokerTraderPlugin
                 if (item.TemplateId == CurrencyHelper.DOLLAR_ID) amount *= ModConfig.BuyRateDollar;
                 if (item.TemplateId == CurrencyHelper.EURO_ID) amount *= ModConfig.BuyRateEuro;
                 int roundedAmount = Convert.ToInt32(Math.Round(amount));
-                return new TraderItemPriceData(BROKER_TRADER_ID, ItemPrice.Constructor(CurrencyHelper.ROUBLE_ID, roundedAmount), roundedAmount, roundedAmount, 0, 0);
+                return new TraderItemPriceData(BROKER_TRADER_ID, ItemPrice.New(CurrencyHelper.ROUBLE_ID, roundedAmount), roundedAmount, roundedAmount, 0, 0);
             }
 
             // Look for highest paying trader, but get price in roubles,
@@ -215,23 +216,23 @@ namespace BrokerTraderPlugin
                 NotificationManagerClass.DisplayWarningNotification("BrokerTrader error! GetTraderItemPriceData - supplyData is null", EFT.Communications.ENotificationDurationType.Long);
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            if (!trader.Info.CanBuyItem(item)) return new TraderItemPriceData(trader.Id, null, -1, -1);
+            if (!trader.RInfo().CanBuyItem(item)) return new TraderItemPriceData(trader.Id, null, -1, -1);
             string currencyId = CurrencyHelper.GetCurrencyId(trader.Settings.Currency);
             double amount = PriceHelper.CalculateBasePriceForAllItems(item, 0, SupplyData[trader.Id], trader.Settings.BuyerUp);
-            int amountInRoubles = Convert.ToInt32(Math.Floor(trader.Info.ApplyPriceModifier(amount))); // save rouble price
+            int amountInRoubles = Convert.ToInt32(Math.Floor(trader.RInfo().ApplyPriceModifier(amount))); // save rouble price
             int commissionInRoubles = Convert.ToInt32(Math.Round(amountInRoubles * ModConfig.ProfitCommissionPercentage / 100));
 
 
             amount /= SupplyData[trader.Id].CurrencyCourses[currencyId];
-            amount = trader.Info.ApplyPriceModifier(amount);
+            amount = trader.RInfo().ApplyPriceModifier(amount);
 
             int finalAmount = Convert.ToInt32(Math.Floor(amount));
             int commission = Convert.ToInt32(Math.Round(finalAmount * ModConfig.ProfitCommissionPercentage / 100));
-            if (amount.ApproxEquals(0.0))
+            if (amount.RApproxEquals(0.0))
             {
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
-            return new TraderItemPriceData(trader.Id, ItemPrice.Constructor(currencyId, finalAmount - commission), finalAmount, amountInRoubles, commission, commissionInRoubles);
+            return new TraderItemPriceData(trader.Id, ItemPrice.New(currencyId, finalAmount - commission), finalAmount, amountInRoubles, commission, commissionInRoubles);
         }
 
         public static RagfairItemPriceData GetRagfairItemPriceData(Item item)
@@ -241,7 +242,7 @@ namespace BrokerTraderPlugin
                 return new RagfairItemPriceData(null, -1);
             }
 
-            if (item.IsContainer && item.GetAllItems().Count() > 1)
+            if (item.IsContainer && item.RGetAllItems().Count() > 1)
             {
                 return new RagfairItemPriceData(null, -1);
             }
@@ -254,7 +255,8 @@ namespace BrokerTraderPlugin
             }
             else
             {
-                foreach (var itemIter in item.GetAllItems())
+                //foreach (var itemIter in item.GetAllItems())
+                foreach (var itemIter in item.RGetAllItems())
                 {
                     double priceIter = GetSingleRagfairItemPriceData(itemIter);
                     if (priceIter < 1) return new RagfairItemPriceData(null, -1);
@@ -272,7 +274,7 @@ namespace BrokerTraderPlugin
             int commission = Convert.ToInt32(Math.Round(amount * ModConfig.ProfitCommissionPercentage / 100));
 
 
-            return new RagfairItemPriceData(ItemPrice.Constructor(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
+            return new RagfairItemPriceData(ItemPrice.New(CurrencyHelper.ROUBLE_ID, amount - tax - commission), amount, tax, commission);
         }
 
         // using CalculateBuyoutPrice from PriceHelper would help with reflection.

@@ -15,37 +15,35 @@ namespace BrokerTraderPlugin.Reflections
     /// </summary>
     internal static class PriceHelper
     {
-        public static Type classType;
+        public static readonly Type ReflectedType;
         static PriceHelper()
         {
-            // use AccessTools.AllAssemblies() or AllTypes()?
-            var assembly = Assembly.GetAssembly(typeof(TarkovApplication));
-            // Find the static class
-            classType = AccessTools.GetTypesFromAssembly(assembly).FirstOrDefault(type =>
+            var methodNames = new string[]
             {
-                var methodNames = AccessTools.GetMethodNames(type);
-                // Really make sure it's the correct class, just in case.
-                return methodNames.Contains("CalculateTaxPrice")
-                && methodNames.Contains("CalculateBaseTaxesAllItems")
-                && methodNames.Contains("CalculateBasePriceForAllItems")
-                && methodNames.Contains("CalculateBuyoutBasePriceForSingleItem");
-            });
-            if (classType == null) throw new Exception($"{PluginInfo.PLUGIN_GUID}. Couldn't find a \"PriceHelper\" type by reflection.");
+                "CalculateTaxPrice",
+                "CalculateBaseTaxesAllItems",
+                "CalculateBasePriceForAllItems",
+                "CalculateBuyoutBasePriceForSingleItem"
+            };
+            ReflectedType = ReflectionHelper.FindClassTypeByMethodNames(methodNames);
         }
 
         public static double CalculateBasePriceForAllItems(Item item, int itemsCount, IBasePriceSource basePriceSource, bool isFence)
         {
-            return (double)AccessTools.Method(classType, "CalculateBasePriceForAllItems").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
+            return ReflectedType.InvokeMethod<double>("CalculateBasePriceForAllItems", new object[] { item, itemsCount, basePriceSource, isFence });
+            //return (double)AccessTools.Method(ReflectedType, "CalculateBasePriceForAllItems").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
         }
 
         public static double CalculateBuyoutBasePriceForSingleItem(Item item, int itemsCount, IBasePriceSource basePriceSource, bool isFence)
         {
-            return (double)AccessTools.Method(classType, "CalculateBuyoutBasePriceForSingleItem").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
+            return ReflectedType.InvokeMethod<double>("CalculateBuyoutBasePriceForSingleItem", new object[] { item, itemsCount, basePriceSource, isFence });
+            //return (double)AccessTools.Method(ReflectedType, "CalculateBuyoutBasePriceForSingleItem").Invoke(null, new object[] { item, itemsCount, basePriceSource, isFence });
         }
 
         public static double CalculateTaxPrice(Item item, int offerItemCount, double requirementsPrice, bool sellInOnePiece)
         {
-            return (double)AccessTools.Method(classType, "CalculateTaxPrice").Invoke(null, new object[] { item, offerItemCount, requirementsPrice, sellInOnePiece });
+            return ReflectedType.InvokeMethod<double>("CalculateTaxPrice", new object[] { item, offerItemCount, requirementsPrice, sellInOnePiece });
+            //return (double)AccessTools.Method(ReflectedType, "CalculateTaxPrice").Invoke(null, new object[] { item, offerItemCount, requirementsPrice, sellInOnePiece });
         }
     }
 }

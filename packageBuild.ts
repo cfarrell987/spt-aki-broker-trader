@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 
 // SPT-AKI mods folder path
-const sptAkiMods = "D:/SPT-AKI/SPTARKOV 3.5.5/user/mods";
-const sptAkiBepinex = "D:/SPT-AKI/SPTARKOV 3.5.5/BepInEx/plugins";
-const pluginPath = "client-side/BrokerTraderPlugin/bin/Debug/net472";
-const pluginName = "BrokerTraderPlugin.dll";
+//const sptAkiMods = "D:/SPT-AKI/SPTARKOV 3.5.5/user/mods";
+//const sptAkiBepinex = "D:/SPT-AKI/SPTARKOV 3.5.5/BepInEx/plugins";
+//const pluginPath = "client-side/BrokerTraderPlugin/bin/Debug/net472";
+//const pluginFileName = "BrokerTraderPlugin.dll";
+
+const sptAkiVersion = "3.5.3";
+const targetVersion = "3.5.5";
+const targetVersionPostfix = `.SPT-AKI.${targetVersion}`;
+const sptAkiMods = `D:/SPT-AKI/SPTARKOV ${sptAkiVersion}/user/mods`;
+const sptAkiBepinex = `D:/SPT-AKI/SPTARKOV ${sptAkiVersion}/BepInEx/plugins`;
+const pluginName = "BrokerTraderPlugin";
+const pluginPath = `client-side/${pluginName}/bin/Debug/net472`;
+const pluginFileName = `${pluginName}.dll`;
 
 // This is a simple script used to build a mod package. The script will copy necessary files to the build directory
 // and compress the build directory into a zip file that can be easily shared.
@@ -68,13 +77,13 @@ fs.moveSync(path.normalize(`${__dirname}/../~${modName}`), path.normalize(`${__d
 
 // Copy into a different structure.
 fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${__dirname}/dist/user/mods/${modName}`));
-fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginName}`), path.normalize(`${__dirname}/dist/BepInEx/plugins/${pluginName}`));
+fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginFileName}`), path.normalize(`${__dirname}/dist/BepInEx/plugins/${pluginFileName}`));
 
 //fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${__dirname}/dist/user/mods/${modName}`));
 
 // My personal preference to copy a ready to test version to the mods folder of SPT-AKI
 fs.copySync(path.normalize(`${__dirname}/${modName}`), path.normalize(`${sptAkiMods}/${modName}`));
-fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginName}`), path.normalize(`${sptAkiBepinex}/${pluginName}`));
+fs.copySync(path.normalize(`${__dirname}/${pluginPath}/${pluginFileName}`), path.normalize(`${sptAkiBepinex}/${pluginFileName}`));
 
 console.log("Build files copied.");
 
@@ -89,7 +98,7 @@ console.log(__dirname+"\\dist")
 
 zip({
     source: "*",
-    destination: `../dist_zip/${modName}.zip`,
+    destination: `../dist_zip/${modName}${targetVersionPostfix ?? ""}.zip`,
     cwd: `${__dirname}/dist`
 }).catch(function(err)
 {

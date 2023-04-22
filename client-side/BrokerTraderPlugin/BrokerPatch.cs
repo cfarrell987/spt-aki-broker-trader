@@ -22,6 +22,8 @@ using BrokerTraderPlugin.Reflections;
 using UnityEngine;
 using static UnityEngine.RemoteConfigSettingsHelper;
 using UnityEngine.UIElements;
+using InventoryOrganizingFeatures.Reflections.Extensions;
+using BrokerTraderPlugin.Reflections.Extensions;
 
 namespace BrokerPatch
 {
@@ -40,18 +42,7 @@ namespace BrokerPatch
             try
             {
                 // - Can also be used to filter for Unlocked traders, but the second variant seems to work fine so far.
-                //TradersList = tradersList.Where((trader) =>
-                //{
-                //    if (!session.Profile.TradersInfo.ContainsKey(trader.Id)) return false;
-                //    return SupportedTraderIds.Contains(trader.Id) && session.Profile.TradersInfo[trader.Id].Unlocked;
-                //});
-                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && trader.Info.Unlocked);
-                //foreach (var trader in TradersList)
-                //{
-                //    Logger.LogError($"TRADER LISTING: {trader.LocalizedName}");
-                //}
-                //Session = Traverse.Create(__instance).Fields().Select(fName => AccessTools.Field(typeof(MerchantsList), fName)).FirstOrDefault(field => field.FieldType == typeof(ISession)).GetValue(__instance) as ISession;
-                //Session = typeof(MerchantsList).GetField("ginterface128_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as ISession;
+                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && trader.RInfo().Unlocked);
                 Session = session; // session is actually one of the args, bruh
                 BackendCfg = Singleton<BackendConfigSettingsClass>.Instance;
                 if (Session == null) throw new Exception("Session is null.");
@@ -127,7 +118,7 @@ namespace BrokerPatch
         protected override MethodBase GetTargetMethod()
         {
             // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
-            // method_10 is still the same for 3.5.5. Identifying by CIL instructions could be used but that a pretty unnecessary stretch.
+            // method_10 is still the same for 3.5.5. Identifying by CIL instructions could be used but that's a pretty unnecessary stretch.
 
             // The original method_10 has several properties to distinct it:
             // * GetMethodBody().MaxStackSize == 4
@@ -135,26 +126,33 @@ namespace BrokerPatch
             // * One(first) of the variables is an "ItemPrice" generic structure (in 3.5.5. a TraderClass.GStruct219).
             // For now dynamically reaching this method is possible by simply checking if it has a variable of generic "ItemPrice" structure type.
             // Later this might be changed for more precision. IL code checks are still a last resort.
-            var method = AccessTools.GetDeclaredMethods(typeof(TraderDealScreen)).Where(method => method.GetMethodBody().LocalVariables.Any(variable => variable.LocalType == ItemPrice.structType)).FirstOrDefault();
+            var method = AccessTools.GetDeclaredMethods(typeof(TraderDealScreen)).Where(method => method.GetMethodBody().LocalVariables.Any(variable => variable.LocalType == ItemPrice.DeclaredType)).FirstOrDefault();
             if (method == null) throw new Exception("PatchEquivalentSum. Couldn't find the method by reflection.");
             return method;
         }
 
+        // TraderClass field has a generic name
+        private static readonly FieldInfo TraderField;
+        // Constructor will run before patch is enabled.
+        // Unlike GetTargetMethod, the patched code will run multiple times so reflection search results should be cached.
+        static PatchEquivalentSum()
+        {
+            TraderField = typeof(TraderDealScreen).GetFields(AccessTools.allDeclared).FirstOrDefault(field => field.FieldType == typeof(TraderClass) && !field.IsPublic);
+        }
+
         [PatchPostfix]
-        private static void PatchPostfix(TraderDealScreen __instance)
+        private static void PatchPostfix(TraderDealScreen __instance, ref TextMeshProUGUI ____equivalentSumValue)
         {
             try
             {
-                //var trader = typeof(TraderDealScreen).GetField("gclass1949_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TraderClass; // has to be gclass1952_0
                 // Search for trader fiels by type instead of a generic name.
-                var trader = Traverse.Create(__instance).Fields().Select(fName => AccessTools.Field(__instance.GetType(), fName)).FirstOrDefault(field => field.FieldType == typeof(TraderClass) && !field.IsPublic).GetValue(__instance) as TraderClass;
-                if (trader == null) throw new Exception("TraderDealScreen. Found trader field is null.");
-                var _equivalentSumValue = typeof(TraderDealScreen).GetField("_equivalentSumValue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TextMeshProUGUI;
+                if (TraderField.GetValue(__instance) is not TraderClass trader) throw new Exception("TraderDealScreen. Found trader field is null.");
+                //var ____equivalentSumValue = typeof(TraderDealScreen).GetField("_equivalentSumValue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TextMeshProUGUI;
                 if (trader.Id == BROKER_TRADER_ID)
                 {
                     // source is a list of ItemPrices, reference ItemPriceReflection.
                     var source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
-                    if (!source.Any()) _equivalentSumValue.text = "";
+                    if (!source.Any()) ____equivalentSumValue.text = "";
                     else
                     {
                         var groupByCurrency = source.GroupBy(ItemPrice.GetCurrencyId).Select(currencyGroup => new
@@ -163,15 +161,15 @@ namespace BrokerPatch
                             Amount = currencyGroup.Sum(ItemPrice.GetAmount),
                         });
                         // Rouble amount has to be always first. Since Broker's main currency is RUB.
-                        _equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
+                        ____equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
                         foreach (var currency in groupByCurrency.Where(group => group.CurrencyId != CurrencyHelper.ROUBLE_ID))
                         {
-                            _equivalentSumValue.text += $" + {CurrencyHelper.GetCurrencyCharById(currency.CurrencyId)} {currency.Amount}";
+                            ____equivalentSumValue.text += $" + {CurrencyHelper.GetCurrencyCharById(currency.CurrencyId)} {currency.Amount}";
                         }
                     }
                 }
                 Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))");
-                _equivalentSumValue.text = regex.Replace(_equivalentSumValue.text, " ");
+                ____equivalentSumValue.text = regex.Replace(____equivalentSumValue.text, " ");
             }
             catch (Exception ex)
             {
@@ -219,20 +217,27 @@ namespace BrokerPatch
             return typeof(TraderAssortmentControllerClass).GetMethod("Sell", BindingFlags.Instance | BindingFlags.Public);
         }
 
+        // TraderClass field has a generic name
+        private static readonly FieldInfo TraderField;
+        // Constructor will run before patch is enabled.
+        // Unlike GetTargetMethod, the patched code will run multiple times so reflection search results should be cached.
+        static PatchSendDataOnDealButtonPress()
+        {
+            TraderField = typeof(TraderAssortmentControllerClass).GetFields(AccessTools.allDeclared).FirstOrDefault(field => field.FieldType == typeof(TraderClass) && !field.IsPublic && field.IsInitOnly);
+        }
+
         // Prefer prefix patch to make sure that the request is sent in time. (Although it's probably sync)
         [PatchPrefix]
         private static void PatchPrefix(TraderAssortmentControllerClass __instance)
         {
             try
             {
-                var trader = Traverse.Create(__instance).Fields().Select(fName => AccessTools.Field(__instance.GetType(), fName)).FirstOrDefault(field => field.FieldType == typeof(TraderClass) && !field.IsPublic && field.IsInitOnly).GetValue(__instance) as TraderClass;
-                if (trader == null) throw new Exception("TraderAssortmentControllerClass. Found trader field is null.");
-                //var trader = __instance.GetType().GetField("gclass1949_0", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TraderClass;
+                if (TraderField.GetValue(__instance) is not TraderClass trader) throw new Exception("TraderAssortmentControllerClass. Found trader field is null.");
                 if (trader.Id == BROKER_TRADER_ID)
                 {
-                    // Both are probably be identical, but use lower for consistency with source code.
-                    // var soldItems = __instance.SellingStash.Containers.First().Items; 
-                    var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList();
+                    //var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList(); - used in original code, but has generic references
+                    var soldItems = __instance.SellingStash.Containers.First().Items.ToList(); // - identical result, no generic references
+                    
                     if (soldItems.Count > 0)
                     {
                         var itemsSellData = soldItems.Select(GetBrokerItemSellData);
@@ -244,11 +249,10 @@ namespace BrokerPatch
                         {
                             var groupByTrader = sellData.Select(entry => entry.Value).GroupBy(data => data.TraderId);
                             Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))"); // format thousands with spaces
-                            //int traderNameSpacing = Math.Max(groupByTrader.Max(group => $"{group.Key} Nickname".Localized().Length), "Flea Market".Length);
                             string ragfairLocale = "";
-                            foreach (var word in "RAG FAIR".Localized().Split(' '))
+                            foreach (var word in "RAG FAIR".RLocalized().Split(' '))
                             {
-                                ragfairLocale += char.ToUpper(word[0]) + word.Substring(1) + " ";
+                                ragfairLocale += char.ToUpper(word[0]) + word.Substring(1).ToLower() + " ";
                             }
                             ragfairLocale.Trim();
                             const string messageInitVal = "\nReputation changes:\n\n";
@@ -257,8 +261,7 @@ namespace BrokerPatch
                             {
                                 int totalPrice = group.Sum(data => data.Price);
                                 string currencyChar = CurrencyHelper.GetCurrencyChar(TradersList.First(trader => trader.Id == group.First().TraderId).Settings.Currency);
-                                message += $"    \u2022    {$"{group.Key} Nickname".Localized()}:    + {currencyChar} {regex.Replace(totalPrice.ToString(), " ")}\n\n";
-                                //message += string.Format("{0,-" + traderNameSpacing + "}:   + {1} {2}\n\n", $"{group.Key} Nickname".Localized(), currencyChar, regex.Replace(totalPrice.ToString(), " "));
+                                message += $"    \u2022    {$"{group.Key} Nickname".RLocalized()}:    + {currencyChar} {regex.Replace(totalPrice.ToString(), " ")}\n\n";
                             }
                             // For Broker Trader - show flea rep increment
                             foreach (var group in groupByTrader.Where(group => group.Key == BROKER_TRADER_ID))
@@ -269,7 +272,6 @@ namespace BrokerPatch
                                 string repIncStr = (totalPrice * RagfairSellRepGain).ToString();
                                 // add a space 2 digits after the floating point for better contextual readability
                                 message += $"    \u2022    {ragfairLocale}:    +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
-                                //message += string.Format("{0,-" + traderNameSpacing + "}:   +{1}\n\n", "Flea Market", repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " "));
                             }
                             if (message != messageInitVal)
                             {

@@ -15,46 +15,45 @@ namespace BrokerTraderPlugin.Reflections
     /// </summary>
     internal static class CurrencyHelper
     {
-        public static Type classType;
+        public static readonly Type ReflectedType;
         public static readonly string ROUBLE_ID;
         public static readonly string DOLLAR_ID;
         public static readonly string EURO_ID;
         static CurrencyHelper()
         {
-            // use AccessTools.AllAssemblies() or AllTypes()?
-            var assembly = Assembly.GetAssembly(typeof(TarkovApplication));
-            // Find the static class
-            classType = AccessTools.GetTypesFromAssembly(assembly).FirstOrDefault(type =>
+            var fieldNames = new string[]
             {
-                var fieldNames = AccessTools.GetFieldNames(type);
-                return fieldNames.Contains("ROUBLE_ID") && fieldNames.Contains("DOLLAR_ID") && fieldNames.Contains("EURO_ID");
-            });
-            if (classType == null) throw new Exception($"{PluginInfo.PLUGIN_GUID}. Couldn't find a \"CurrencyHelper\" type by reflection.");
-            // Init "constants" for easy access and code consistency.
-            ROUBLE_ID = classType.GetField("ROUBLE_ID").GetValue(null) as string;
-            DOLLAR_ID = classType.GetField("DOLLAR_ID").GetValue(null) as string;
-            EURO_ID = classType.GetField("EURO_ID").GetValue(null) as string;
+                "ROUBLE_ID",
+                "DOLLAR_ID",
+                "EURO_ID"
+            };
+            ReflectedType = ReflectionHelper.FindClassTypeByFieldNames(fieldNames);
+
+            // Init "constants".
+            ROUBLE_ID = ReflectedType.GetFieldValue<string>("ROUBLE_ID");
+            DOLLAR_ID = ReflectedType.GetFieldValue<string>("DOLLAR_ID");
+            EURO_ID = ReflectedType.GetFieldValue<string>("EURO_ID");
         }
 
         public static string GetCurrencyCharById(string templateId)
         {
-            return AccessTools.Method(classType, "GetCurrencyCharById").Invoke(null, new object[] { templateId }) as string;
+            return ReflectedType.InvokeMethod<string>("GetCurrencyCharById", new object[] { templateId });
         }
 
         public static string GetCurrencyChar(ECurrencyType currencyType)
         {
-            return AccessTools.Method(classType, "GetCurrencyChar").Invoke(null, new object[] { currencyType }) as string;
+            return ReflectedType.InvokeMethod<string>("GetCurrencyChar", new object[] { currencyType });
         }
 
         public static string GetCurrencyId(ECurrencyType currencyType)
         {
-            return AccessTools.Method(classType, "GetCurrencyId").Invoke(null, new object[] { currencyType }) as string;
+            return ReflectedType.InvokeMethod<string>("GetCurrencyId", new object[] { currencyType });
 
         }
 
         public static bool IsCurrencyId(string id)
         {
-            return (bool)AccessTools.Method(classType, "IsCurrencyId").Invoke(null, new object[] { id });
+            return ReflectedType.InvokeMethod<bool>("IsCurrencyId", new object[] { id });
 
         }
 
