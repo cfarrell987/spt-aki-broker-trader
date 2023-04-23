@@ -58,6 +58,22 @@ namespace BrokerTraderPlugin
             Commission = commission;
             CommissionInRoubles = commissionInRoubles;
         }
+
+        public int Profit
+        {
+            get
+            {
+                return Amount - Commission;
+            }
+        }
+
+        public int ProfitInRoubles
+        {
+            get
+            {
+                return AmountInRoubles - CommissionInRoubles;
+            }
+        }
     }
 
     internal readonly struct RagfairItemPriceData
@@ -72,6 +88,14 @@ namespace BrokerTraderPlugin
             RequirementsAmount = requirementsAmount;
             Tax = tax;
             Commission = commission;
+        }
+
+        public int Profit
+        {
+            get
+            {
+                return RequirementsAmount - Tax - Commission;
+            }
         }
     }
 
@@ -295,7 +319,7 @@ namespace BrokerTraderPlugin
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
             // UseRagfair check is not necessary but let it be an extra measure.
-            return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+            return ModConfig.UseRagfair && ragfairPrice.Profit >= traderPrice.ProfitInRoubles
                 ? ragfairPrice.Price
                 : traderPrice.Price;
         }
@@ -304,7 +328,7 @@ namespace BrokerTraderPlugin
             TraderItemPriceData traderPrice = GetBestTraderPriceData(item);
             RagfairItemPriceData ragfairPrice = GetRagfairItemPriceData(item);
             // UseRagfair check is not necessary but let it be an extra measure.
-            return ModConfig.UseRagfair && ragfairPrice.RequirementsAmount >= traderPrice.AmountInRoubles
+            return ModConfig.UseRagfair && ragfairPrice.Profit >= traderPrice.ProfitInRoubles
                 ? new BrokerItemSellData(item.Id, BROKER_TRADER_ID, ragfairPrice.RequirementsAmount, ragfairPrice.RequirementsAmount, ragfairPrice.Tax, ragfairPrice.Commission, ragfairPrice.Commission)
                 : new BrokerItemSellData(item.Id, traderPrice.TraderId, traderPrice.Amount, traderPrice.AmountInRoubles, 0, traderPrice.Commission, traderPrice.CommissionInRoubles);
         }
