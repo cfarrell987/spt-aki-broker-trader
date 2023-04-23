@@ -92,6 +92,7 @@ export class BrokerTraderRouter
             RagfairIgnoreAttachments: modCfg.ragfairIgnoreAttachments, 
             RagfairIgnoreFoundInRaid: modCfg.ragfairIgnoreFoundInRaid, 
             RagfairIgnorePlayerLevel: modCfg.ragfairIgnorePlayerLevel,
+            TradersIgnoreUnlockedStatus: modCfg.tradersIgnoreUnlockedStatus,
             UseNotifications: modCfg.useNotifications,
             NotificationsLongerDuration: modCfg.notificationsLongerDuration,
             UseClientPlugin: modCfg.useClientPlugin ?? true

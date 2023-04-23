@@ -313,7 +313,7 @@ export class BrokerPriceManager
     {
         const itemAndChildren = this.itemHelper.findAndReturnChildrenAsItems(pmcData.Inventory.items, item._id);
         return !itemAndChildren.some(item => !this.canTemplateBeSoldToTrader(item._tpl, traderId) || !this.passesBuyoutRestrictions(item, traderId === Traders.FENCE))
-            && (pmcData?.TradersInfo[traderId]?.unlocked ?? false); // default being false seems logical, but might change to true if needed
+            && (modConfig.tradersIgnoreUnlockedStatus || (pmcData?.TradersInfo[traderId]?.unlocked ?? false)); // default being false seems logical, but might change to true if needed
     }
 
     /**

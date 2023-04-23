@@ -41,8 +41,7 @@ namespace BrokerPatch
             // Get supported TraderClass instancess to work with.
             try
             {
-                // - Can also be used to filter for Unlocked traders, but the second variant seems to work fine so far.
-                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && trader.RInfo().Unlocked);
+                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && (PriceManager.ModConfig.TradersIgnoreUnlockedStatus || trader.RInfo().Unlocked));
                 Session = session; // session is actually one of the args, bruh
                 BackendCfg = Singleton<BackendConfigSettingsClass>.Instance;
                 if (Session == null) throw new Exception("Session is null.");
@@ -237,7 +236,7 @@ namespace BrokerPatch
                 {
                     //var soldItems = __instance.SellingTableGrid.ContainedItems.Keys.ToList(); - used in original code, but has generic references
                     var soldItems = __instance.SellingStash.Containers.First().Items.ToList(); // - identical result, no generic references
-                    
+
                     if (soldItems.Count > 0)
                     {
                         var itemsSellData = soldItems.Select(GetBrokerItemSellData);

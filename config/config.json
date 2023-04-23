@@ -9,6 +9,7 @@
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
+    "tradersIgnoreUnlockedStatus": true,
     "useNotifications": true,
     "notificationsLongerDuration": false,
     "useCache": false,

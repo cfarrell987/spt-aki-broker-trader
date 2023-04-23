@@ -26,6 +26,7 @@ namespace BrokerTraderPlugin
         public bool RagfairIgnoreAttachments { get; set; }
         public bool RagfairIgnoreFoundInRaid { get; set; }
         public bool RagfairIgnorePlayerLevel { get; set; }
+        public bool TradersIgnoreUnlockedStatus { get; set; }
         public bool UseNotifications { get; set; }
         public bool NotificationsLongerDuration { get; set; }
         public bool UseClientPlugin { get; set; }
