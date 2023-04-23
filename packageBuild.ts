@@ -6,7 +6,7 @@
 //const pluginPath = "client-side/BrokerTraderPlugin/bin/Debug/net472";
 //const pluginFileName = "BrokerTraderPlugin.dll";
 
-const sptAkiVersion = "3.5.3";
+const sptAkiVersion = "3.5.5";
 const targetVersion = "3.5.5";
 const targetVersionPostfix = `.SPT-AKI.${targetVersion}`;
 const sptAkiMods = `D:/SPT-AKI/SPTARKOV ${sptAkiVersion}/user/mods`;

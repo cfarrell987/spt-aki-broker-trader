@@ -104,7 +104,10 @@ export class BrokerPriceManager
             if (modConfig.customTraderIds == null || modConfig.customTraderIds.length < 1)
             {
                 // Exclude LK and "ragfair"
-                this.supportedTraders = Object.keys(this.dbTraders).filter((id: string) => ![Traders.LIGHTHOUSEKEEPER, "ragfair"].includes(id));
+                this.supportedTraders = Object.keys(this.dbTraders).filter(
+                    (id: string) => 
+                        ![Traders.LIGHTHOUSEKEEPER, "ragfair", BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(id)
+                );
             }
             else 
             {
@@ -133,6 +136,8 @@ export class BrokerPriceManager
      */
     public initializeLookUpTables(): void
     {        
+        //this.baseClassHelper.hydrateLookup(); - might resolve "not found in cache" issue for some people
+        // should try it out later
         // Init array of supported traders id.
         this.initializeSupportedTraders();
         // BrokerPriceManager.getInstance(); - can be used as a temporary bandaid but...
@@ -291,6 +296,7 @@ export class BrokerPriceManager
     private getTradersMetaData(): TradersMetaData
     {
         const data: TradersMetaData = {};
+        const defaultTraderIds: string[] = Object.values(Traders);
         for (const traderId of this.supportedTraders)
         {
             const traderName = this.dbTraders[traderId].base.nickname;
@@ -306,7 +312,9 @@ export class BrokerPriceManager
                 itemsBuyProhibited: itemsBuyProhibited,
                 buyPriceCoef: traderCoef
             };
+            if (!defaultTraderIds.includes(traderId)) console.log(`[${modInfo.name} ${modInfo.version}] Loaded meta data for custom trader: ${traderName}`);
         }
+
         // Manually add Broker's Meta Data
         // Only used as a sort of "sell to flea" or "currency exchange" flag
         data[BrokerPriceManager.brokerTraderId] = {
