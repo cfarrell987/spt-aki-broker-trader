@@ -114,6 +114,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         // Ignore config "items_buy" and merge all buy categories from other traders.
         brokerBase.items_buy.category = [];
         brokerBase.items_buy.id_list = [];
+        console.log(JSON.stringify(BrokerPriceManager.instance.supportedTraders));
         for (const tId of Object.values(BrokerPriceManager.instance.supportedTraders))
         {
             const trader = tables.traders[tId];

@@ -107,7 +107,7 @@ export class BrokerTraderRouter
 
     private static respondGetSupportedTraderIds(): IGetBodyResponseData<string[]>
     {
-        return this.http.getBody<string[]>(Object.values(BrokerPriceManager.instance.supportedTraders));
+        return this.http.getBody<string[]>(BrokerPriceManager.instance.supportedTraders);
     }
     
     private static respondGetItemRagfairPriceTable(): IGetBodyResponseData<Record<string, number>>

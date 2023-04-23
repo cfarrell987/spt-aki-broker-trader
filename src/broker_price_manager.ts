@@ -55,7 +55,7 @@ export class BrokerPriceManager
     private dbGlobals: IGlobals;
     private dbItems: Record<string, ITemplateItem>; // Might replace with ItemHelper.getItems() since I don't write anything into the database
     private dbTraders: Record<string, ITrader>;
-    public supportedTraders: Record<string, string>;
+    public supportedTraders: string[] = [];
 
     private _tradersMetaData: TradersMetaData;
     private _currencyBasePrices: Record<string, number>; // currency base prices based on PK and Skier prices
@@ -82,13 +82,39 @@ export class BrokerPriceManager
         this.handbook = this.dbServer.getTables().templates.handbook;
         this.dbItems = this.dbServer.getTables().templates.items;
         this.dbTraders = this.dbServer.getTables().traders;
-        // TODO: implement custom trader support.
-        this.supportedTraders = Object.keys(Traders).filter(key => Traders[key] !== Traders.LIGHTHOUSEKEEPER).reduce((accum, key) => 
-        {
-            accum[key] = Traders[key];
-            return accum;
-        }, {}); 
+
         this._currencyBasePrices = {};
+    }
+    
+    /**
+     * Initializes the array of supported trader ids. 
+     * Move to a separate method to make it delayed.
+     * Should be executed inside initializeLookUpTables(PostAkiLoad), after all custom traders have been loaded into the database.
+     */
+    public initializeSupportedTraders(): void
+    {
+        // Init supported traders list with default traders, except lighthouse keeper
+        const defaultTraderIds: string[] = Object.values(Traders).filter((id: string) => id !== Traders.LIGHTHOUSEKEEPER);
+    
+        this.supportedTraders = defaultTraderIds;
+        // Pull up custom traders
+        if (modConfig.useCutomTraders)
+        {
+            // If no explicit id's specified just use any available trader from database (except LK).
+            if (modConfig.customTraderIds == null || modConfig.customTraderIds.length < 1)
+            {
+                // Exclude LK and "ragfair"
+                this.supportedTraders = Object.keys(this.dbTraders).filter((id: string) => ![Traders.LIGHTHOUSEKEEPER, "ragfair"].includes(id));
+            }
+            else 
+            {
+                // Filter out accidental trader id's to avoid duplicates
+                this.supportedTraders = this.supportedTraders.concat(modConfig.customTraderIds.filter(
+                    id => !defaultTraderIds.concat([BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId]).includes(id))
+                );
+            }
+        }
+        console.log(`[${modInfo.name} ${modInfo.version}] Initialized supported traders range. ${this.supportedTraders.length} traders are being supported.`);
     }
 
     /**
@@ -107,6 +133,8 @@ export class BrokerPriceManager
      */
     public initializeLookUpTables(): void
     {        
+        // Init array of supported traders id.
+        this.initializeSupportedTraders();
         // BrokerPriceManager.getInstance(); - can be used as a temporary bandaid but...
         // This method should fail if class hasn't been yet instantialized.
         const cacheDir = path.normalize(path.resolve(`${__dirname}/../cache`));
@@ -263,9 +291,9 @@ export class BrokerPriceManager
     private getTradersMetaData(): TradersMetaData
     {
         const data: TradersMetaData = {};
-        for (const traderName in this.supportedTraders)
+        for (const traderId of this.supportedTraders)
         {
-            const traderId = this.supportedTraders[traderName];
+            const traderName = this.dbTraders[traderId].base.nickname;
             const currency = this.dbTraders[traderId].base.currency;
             const traderCoef = this.dbTraders[traderId].base.loyaltyLevels[0].buy_price_coef;
             const itemsBuy = this.dbTraders[traderId].base.items_buy;
@@ -296,7 +324,7 @@ export class BrokerPriceManager
             itemsBuy: {category: [], id_list: []},
             itemsBuyProhibited: {category: [], id_list: []},
             buyPriceCoef: Infinity // to make sure it's never selected as the most profitable trader
-        } ;
+        };
         return data;
     }
 

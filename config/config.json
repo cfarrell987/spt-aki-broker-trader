@@ -2,6 +2,8 @@
     "logger": {
         "verbose": false
     },
+    "useCutomTraders": true,
+    "customTraderIds": [],
     "buyRateDollar": 1,
     "buyRateEuro": 1,
     "profitCommissionPercentage": 0,
