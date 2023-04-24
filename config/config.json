@@ -2,7 +2,7 @@
     "logger": {
         "verbose": false
     },
-    "useCutomTraders": true,
+    "useCutomTraders": false,
     "customTraderIds": [],
     "buyRateDollar": 1,
     "buyRateEuro": 1,
@@ -11,7 +11,7 @@
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
-    "tradersIgnoreUnlockedStatus": true,
+    "tradersIgnoreUnlockedStatus": false,
     "useNotifications": true,
     "notificationsLongerDuration": false,
     "useCache": false,
