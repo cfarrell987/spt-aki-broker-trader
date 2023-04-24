@@ -105,7 +105,7 @@ zip({
     console.error("A bestzip error has occurred: ", err.stack);
 }).then(function()
 {
-    console.log(`Compressed mod package to: /dist/${modName}.zip`);
+    console.log(`Compressed mod package to: /dist/${modName}${targetVersionPostfix ?? ""}.zip`);
 
     // Now that we're done with the compression we can delete the temporary build directory.
     fs.rmSync(`${__dirname}/${modName}`, { force: true, recursive: true });
