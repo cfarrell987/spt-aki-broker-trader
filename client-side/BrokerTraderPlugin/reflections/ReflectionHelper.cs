@@ -1,4 +1,6 @@
-﻿using HarmonyLib;
+﻿using BepInEx.Logging;
+using EFT;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,11 +16,13 @@ namespace BrokerTraderPlugin.Reflections
     /// </summary>
     internal static class ReflectionHelper
     {
-        private static Assembly PluginAssembly;
+        public static ManualLogSource Logger { get; set; }
+        private static readonly Assembly PluginAssembly; // should be removed if compiled to a separate assembly
+        private static readonly Assembly TarkovAssembly;
         static ReflectionHelper()
         {
             PluginAssembly = Assembly.GetExecutingAssembly();
-            //Plugin.GlobalLogger.LogWarning($"Executing assembly is: {PluginAssembly.FullName}");
+            TarkovAssembly = Assembly.GetAssembly(typeof(TarkovApplication));
         }
         // public static Type FindClassType()
 
@@ -117,7 +121,7 @@ namespace BrokerTraderPlugin.Reflections
             throw new Exception($"ReflectionHelper.AddToCache<{typeof(T)}> can't be used with type {typeof(T)}.");
         }
 
-        public static Type FindClassTypeByMethodNames(string[] names)
+        public static Type FindClassTypeByMethodNames(string[] names, Assembly targetAssembly = null, bool searchInAllTypes = false)
         {
             var key = GenerateCacheKey(names);
             // Take from cache if present
@@ -126,7 +130,9 @@ namespace BrokerTraderPlugin.Reflections
                 return cached;
             }
 
-            var validClasses = AccessTools.AllTypes().Where(type =>
+            targetAssembly ??= TarkovAssembly;
+            var types = searchInAllTypes ? AccessTools.AllTypes() : AccessTools.GetTypesFromAssembly(targetAssembly);
+            var validClasses = types.Where(type =>
             {
                 if (!type.Assembly.Equals(PluginAssembly) && type.IsClass)
                 {
@@ -135,7 +141,16 @@ namespace BrokerTraderPlugin.Reflections
                 }
                 return false;
             });
-            if (validClasses.Count() > 1) throw new AmbiguousMatchException();
+
+            if (validClasses.Count() > 1)
+            {
+                Logger.LogWarning($"ReflectionHelper.FindClassTypeByMethodNames [AmbiguousMatch-Key]: {key}");
+                foreach (var validClass in validClasses)
+                {
+                    Logger.LogWarning($"ReflectionHelper.FindClassTypeByMethodNames [AmbiguousMatch]: {validClass.AssemblyQualifiedName}");
+                }
+                throw new AmbiguousMatchException();
+            }
 
             var result = validClasses.FirstOrDefault();
             if (result == null) throw GetNotFoundException(key);
@@ -149,7 +164,7 @@ namespace BrokerTraderPlugin.Reflections
             return result;
         }
 
-        public static Type FindClassTypeByFieldNames(string[] names)
+        public static Type FindClassTypeByFieldNames(string[] names, Assembly targetAssembly = null, bool searchInAllTypes = false)
         {
             var key = GenerateCacheKey(names);
             // Take from cache if present
@@ -158,7 +173,9 @@ namespace BrokerTraderPlugin.Reflections
                 return cached;
             }
 
-            var validClasses = AccessTools.AllTypes().Where(type =>
+            targetAssembly ??= TarkovAssembly;
+            var types = searchInAllTypes ? AccessTools.AllTypes() : AccessTools.GetTypesFromAssembly(targetAssembly);
+            var validClasses = types.Where(type =>
             {
                 if (!type.Assembly.Equals(PluginAssembly) && type.IsClass)
                 {
@@ -167,7 +184,16 @@ namespace BrokerTraderPlugin.Reflections
                 }
                 return false;
             });
-            if (validClasses.Count() > 1) throw new AmbiguousMatchException();
+
+            if (validClasses.Count() > 1)
+            {
+                Logger.LogWarning($"ReflectionHelper.FindClassTypeByFieldNames [AmbiguousMatch-Key]: {key}");
+                foreach (var validClass in validClasses)
+                {
+                    Logger.LogWarning($"ReflectionHelper.FindClassTypeByFieldNames [AmbiguousMatch]: {validClass.AssemblyQualifiedName}");
+                }
+                throw new AmbiguousMatchException();
+            }
 
             var result = validClasses.FirstOrDefault();
             if (result == null) throw GetNotFoundException(key);
@@ -202,7 +228,17 @@ namespace BrokerTraderPlugin.Reflections
                 var parameters = method.GetParameters();
                 return methodArgTypes.All(argType => parameters.Any(param => param.ParameterType == argType));
             });
-            if (validMethods.Count() > 1) throw new AmbiguousMatchException();
+
+            if (validMethods.Count() > 1)
+            {
+                Logger.LogWarning($"ReflectionHelper.FindMethodByArgTypes [AmbiguousMatch-Key]: {key}");
+                Logger.LogWarning($"ReflectionHelper.FindMethodByArgTypes [AmbiguousMatch-Type-AssemblyQualifiedName]: {type.AssemblyQualifiedName}");
+                foreach (var validMethod in validMethods)
+                {
+                    Logger.LogWarning($"ReflectionHelper.FindMethodByArgTypes [AmbiguousMatch]: {validMethod.Name}");
+                }
+                throw new AmbiguousMatchException();
+            }
 
             var result = validMethods.FirstOrDefault();
             if (result == null) throw GetNotFoundException(key);

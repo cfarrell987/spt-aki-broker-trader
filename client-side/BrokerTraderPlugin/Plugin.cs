@@ -18,6 +18,7 @@ namespace BrokerTraderPlugin
             // Plugin startup logic
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
             GlobalLogger = Logger;
+            ReflectionHelper.Logger = Logger;
             try
             {
                 // Initialize PriceManager as early as possible, to let it collect data it needs from the server.
