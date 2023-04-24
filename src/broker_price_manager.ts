@@ -28,6 +28,7 @@ import { ItemComponentHelper } from "./item_component_helper";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 import { TradersMetaData, BrokerSellData, BrokerPriceManagerCache, TraderMetaData, SellDecision, ProcessedSellData } from "./broker_price_manager_types";
 import { ItemComponentTypes, ItemPointsData } from "./item_component_helper_types";
+import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
 export class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
@@ -38,6 +39,7 @@ export class BrokerPriceManager
     private handbookHelper: HandbookHelper; // Using with hydrateLookup() might be good to check if items exist in handbook and find their ragfair avg price
     private paymentHelper: PaymentHelper;
     private itemHelper: ItemHelper;
+    private baseClassService: ItemBaseClassService;
     private presetHelper: PresetHelper;
     private ragfairServerHelper: RagfairServerHelper;
     private ragfairPriceService: RagfairPriceService;
@@ -69,6 +71,7 @@ export class BrokerPriceManager
 
         this.componentHelper = new ItemComponentHelper(this._container);
         this.itemHelper = container.resolve<ItemHelper>(ItemHelper.name);
+        this.baseClassService = container.resolve<ItemBaseClassService>(ItemBaseClassService.name);
         this.presetHelper = container.resolve<PresetHelper>(PresetHelper.name)
         this.handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name);
         this.paymentHelper = container.resolve<PaymentHelper>(PaymentHelper.name);
@@ -136,8 +139,6 @@ export class BrokerPriceManager
      */
     public initializeLookUpTables(): void
     {        
-        //this.baseClassHelper.hydrateLookup(); - might resolve "not found in cache" issue for some people
-        // should try it out later
         // Init array of supported traders id.
         this.initializeSupportedTraders();
         // BrokerPriceManager.getInstance(); - can be used as a temporary bandaid but...

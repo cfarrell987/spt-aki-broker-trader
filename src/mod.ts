@@ -26,8 +26,10 @@ import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 import { DynamicRouterModService } from "@spt-aki/services/mod/dynamicRouter/DynamicRouterModService"
 import { BrokerTraderRouter } from "./broker_trade_router";
 import { IPostAkiLoadMod } from "@spt-aki/models/external/IPostAkiLoadMod";
+import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
+import { FixedItemBaseClassService } from "./temporary_ItemBaseClassService_fix";
 
-class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod 
+class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
 {
     mod: string;
     logger: VerboseLogger;
@@ -48,6 +50,11 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         BrokerTrader.container = container;
         this.logger = new VerboseLogger(container);
         this.logger.explicitInfo(`[${this.mod}] preAki Loading... `);
+        
+        // Temporary
+        this.logger.explicitInfo(`[${this.mod}] Fixing ItemBaseClassService...`);
+        container.register<FixedItemBaseClassService>(FixedItemBaseClassService.name, FixedItemBaseClassService);
+        container.register(ItemBaseClassService.name, {useToken: FixedItemBaseClassService.name});
 
         if (modCfg.profitCommissionPercentage < 0 || modCfg.profitCommissionPercentage > 99)
         {
