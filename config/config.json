@@ -15,5 +15,6 @@
     "useNotifications": true,
     "notificationsLongerDuration": false,
     "useCache": false,
-    "useClientPlugin": true
+    "useClientPlugin": true,
+    "useItemBaseClassServiceFix": false
 }

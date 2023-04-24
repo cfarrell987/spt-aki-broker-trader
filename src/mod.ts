@@ -52,7 +52,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         this.logger.explicitInfo(`[${this.mod}] preAki Loading... `);
         
         // Temporary
-        if (modCfg["useItemBaseClassServiceFix"] == null || modCfg["useItemBaseClassServiceFix"] === true)
+        if (modCfg["useItemBaseClassServiceFix"] === true)
         {
             this.logger.explicitInfo(`[${this.mod}] Fixing ItemBaseClassService...`);
             container.register<FixedItemBaseClassService>(FixedItemBaseClassService.name, FixedItemBaseClassService);
