@@ -1,3 +1,4 @@
+import { Ixyz } from "./Ixyz";
 import { Item } from "./tables/IItem";
 export interface ILooseLoot {
     spawnpointCount: SpawnpointCount;
@@ -15,14 +16,15 @@ export interface SpawnpointsForced {
 }
 export interface SpawnpointTemplate {
     Id: string;
-    IsStatic: boolean;
+    IsContainer: boolean;
     useGravity: boolean;
     randomRotation: boolean;
-    Position: Xyz;
-    Rotation: Xyz;
+    Position: Ixyz;
+    Rotation: Ixyz;
+    IsAlwaysSpawn: boolean;
     IsGroupPosition: boolean;
     GroupPositions: any[];
-    Root: any;
+    Root: string;
     Items: Item[];
 }
 export interface Spawnpoint {
@@ -31,12 +33,10 @@ export interface Spawnpoint {
     template: SpawnpointTemplate;
     itemDistribution: ItemDistribution[];
 }
-export interface Xyz {
-    x: number;
-    y: number;
-    z: number;
-}
 export interface ItemDistribution {
-    tpl: string;
+    composedKey: ComposedKey;
     relativeProbability: number;
+}
+export interface ComposedKey {
+    key: string;
 }

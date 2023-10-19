@@ -80,7 +80,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         const imageRouter: ImageRouter = container.resolve<ImageRouter>("ImageRouter");
         const configServer = container.resolve<ConfigServer>("ConfigServer");
         const traderConfig: ITraderConfig = configServer.getConfig<ITraderConfig>(ConfigTypes.TRADER);
-        const routerService = container.resolve<DynamicRouterModService>(DynamicRouterModService.name);
+        // const routerService = container.resolve<DynamicRouterModService>(DynamicRouterModService.name); - not used
 
         // Controller override - to handle trade requests
         container.register<BrokerTradeController>(BrokerTradeController.name, BrokerTradeController);
@@ -169,7 +169,7 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
     private registerProfileImage(preAkiModLoader: PreAkiModLoader, imageRouter: ImageRouter): void
     {
         // Reference the mod "res" folder
-        const imageFilepath = `./${preAkiModLoader.getModPath(`Nightingale-brokertrader-${modInfo.version}`)}res`;
+        const imageFilepath = `./${preAkiModLoader.getModPath(`nightingale-broker_trader-${modInfo.version}`)}res`;
 
         // Register a route to point to the profile picture
         imageRouter.addRoute(baseJson.avatar.replace(".png", ""), `${imageFilepath}/broker_portrait1.png`);
@@ -227,11 +227,11 @@ class BrokerTrader implements IPreAkiLoadMod, IPostDBLoadMod, IPostAkiLoadMod
         const eurosId = Money.EUROS;
 
         // Get USD and EUR prices from PK and Skier assorts
-        const pkAssort = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER);
+        const pkAssort = traderHelper.getTraderAssortsByTraderId(Traders.PEACEKEEPER);
         const pkUsdItemId = pkAssort.items.find(item => item._tpl === dollarsId)._id;
         const pkDollarPrice = pkAssort.barter_scheme[pkUsdItemId][0][0].count;
 
-        const skiAssort = traderHelper.getTraderAssortsById(Traders.SKIER);
+        const skiAssort = traderHelper.getTraderAssortsByTraderId(Traders.SKIER);
         const skiEurItemId = skiAssort.items.find(item => item._tpl === eurosId)._id;
         const skiEuroPrice = skiAssort.barter_scheme[skiEurItemId][0][0].count;
         

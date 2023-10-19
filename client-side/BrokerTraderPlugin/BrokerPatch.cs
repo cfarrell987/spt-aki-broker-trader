@@ -140,7 +140,7 @@ namespace BrokerPatch
         }
 
         [PatchPostfix]
-        private static void PatchPostfix(TraderDealScreen __instance, ref TextMeshProUGUI ____equivalentSumValue)
+        private static void PatchPostfix(TraderDealScreen __instance, ref TMP_Text[] ____equivalentSumValue)
         {
             try
             {

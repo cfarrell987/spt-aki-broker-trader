@@ -33,25 +33,36 @@ import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessB
 import { Money } from "@spt-aki/models/enums/Money";
 import { Traders } from "@spt-aki/models/enums/Traders";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
+import { ITraderConfig } from "@spt-aki/models/spt/config/ITraderConfig";
+import { IRagfairConfig } from "@spt-aki/models/spt/config/IRagfairConfig";
+import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
+import { JsonUtil } from "@spt-aki/utils/JsonUtil";
 
 @injectable()
 export class BrokerTradeController extends TradeController
 {
     constructor(
-    @inject("WinstonLogger") logger: ILogger, 
-        @inject("EventOutputHolder") eventOutputHolder: EventOutputHolder, 
-        @inject("TradeHelper") tradeHelper: TradeHelper, 
-        @inject("ItemHelper") itemHelper: ItemHelper, 
-        @inject("ProfileHelper") profileHelper: ProfileHelper, 
-        @inject("RagfairServer") ragfairServer: RagfairServer, 
-        @inject("HttpResponseUtil") httpResponse: HttpResponseUtil, 
-        @inject("LocalisationService") localisationService: LocalisationService, 
-        @inject("ConfigServer") configServer: ConfigServer)
+    @inject("WinstonLogger") logger: ILogger,
+        @inject("EventOutputHolder") eventOutputHolder: EventOutputHolder,
+        @inject("TradeHelper") tradeHelper: TradeHelper,
+        @inject("ItemHelper") itemHelper: ItemHelper,
+        @inject("ProfileHelper") profileHelper: ProfileHelper,
+        @inject("TraderHelper") traderHelper: TraderHelper,
+        @inject("JsonUtil") jsonUtil: JsonUtil,
+        @inject("RagfairServer") ragfairServer: RagfairServer,
+        @inject("HttpResponseUtil") httpResponse: HttpResponseUtil,
+        @inject("LocalisationService") localisationService: LocalisationService,
+        @inject("RagfairPriceService") ragfairPriceService: RagfairPriceService,
+        @inject("ConfigServer") configServer: ConfigServer
+        // @inject("IRagfairConfig") ragfairConfig: IRagfairConfig, - not used
+        // @inject("ITraderConfig") traderConfig: ITraderConfig - not used
+    )
     {
-        super(logger, eventOutputHolder, tradeHelper, itemHelper, profileHelper, ragfairServer, httpResponse, localisationService, configServer);
+        super(logger, eventOutputHolder, tradeHelper, itemHelper, profileHelper, traderHelper, jsonUtil, ragfairServer, httpResponse, localisationService, ragfairPriceService, configServer);
     }
 
-    public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string, foundInRaid?: boolean, upd?: Upd): IItemEventRouterResponse 
+    // public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string, foundInRaid?: boolean, upd?: Upd): IItemEventRouterResponse - old from SPT 3.5.5
+    public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string): IItemEventRouterResponse 
     {
         // Exceptions seem to be handled somewhere where this method is used.
         // And due to the way they are handled - only "error" is displayed instead of the actual error msg.
@@ -66,19 +77,19 @@ export class BrokerTradeController extends TradeController
                     // Redirect currency purchases to corresponding traders
                     const buyRequestData = body as IProcessBuyTradeRequestData;
                     const traderHelper = BrokerPriceManager.instance.container.resolve<TraderHelper>(TraderHelper.name);
-                    const brokerAssort = traderHelper.getTraderAssortsById(BrokerPriceManager.brokerTraderId);
+                    const brokerAssort = traderHelper.getTraderAssortsByTraderId(BrokerPriceManager.brokerTraderId);
                     const brokerUsdItem = brokerAssort.items.find(item => item._tpl === Money.DOLLARS)._id;
                     const brokerEurItem = brokerAssort.items.find(item => item._tpl === Money.EUROS)._id;
 
                     if (buyRequestData.item_id === brokerUsdItem)
                     {
                         buyRequestData.tid = Traders.PEACEKEEPER;
-                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.PEACEKEEPER).items.find(item => item._tpl === Money.DOLLARS)._id;
+                        buyRequestData.item_id = traderHelper.getTraderAssortsByTraderId(Traders.PEACEKEEPER).items.find(item => item._tpl === Money.DOLLARS)._id;
                     }
                     if (buyRequestData.item_id === brokerEurItem)
                     {
                         buyRequestData.tid = Traders.SKIER;
-                        buyRequestData.item_id = traderHelper.getTraderAssortsById(Traders.SKIER).items.find(item => item._tpl === Money.EUROS)._id
+                        buyRequestData.item_id = traderHelper.getTraderAssortsByTraderId(Traders.SKIER).items.find(item => item._tpl === Money.EUROS)._id
                     } 
                     // Let it skip to the super.confirmTrading call at the bottom.
                 }
@@ -90,8 +101,8 @@ export class BrokerTradeController extends TradeController
                     const container = priceManager.container; 
                     const verboseLogger = new VerboseLogger(container);
                     const sellRequestBody = body as IProcessSellTradeRequestData;
-                    const traderHelper = container.resolve<TraderHelper>(TraderHelper.name);
-                    const handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name);
+                    // const traderHelper = container.resolve<TraderHelper>(TraderHelper.name); - not used
+                    // const handbookHelper = container.resolve<HandbookHelper>(HandbookHelper.name); - not used
 
                     // Logging. Shouldn't be executed during normal use, since it additionally searches for items in player inventory by id.
                     if (verboseLogger.isVerboseEnabled)
@@ -109,7 +120,8 @@ export class BrokerTradeController extends TradeController
                     for (const traderId in sellReqDataPerTrader)
                     {
                         const tReqData = sellReqDataPerTrader[traderId];
-                        const tradeResponse = super.confirmTrading(pmcData, tReqData.requestBody, sessionID, foundInRaid, upd);
+                        // const tradeResponse = super.confirmTrading(pmcData, tReqData.requestBody, sessionID, foundInRaid, upd); - old from SPT 3.5.5
+                        const tradeResponse = super.confirmTrading(pmcData, tReqData.requestBody, sessionID);
                         
                         // Make sales sum increase unaffected by commission.
                         // commission is converted to trader currency(don't use commissionInRoubles)
@@ -203,177 +215,14 @@ export class BrokerTradeController extends TradeController
             }
             //console.log(`TRADING TYPE: ${body.Action}`);
             //console.log(`BUYREQ DUMP: ${JSON.stringify(body)}`)
-            return super.confirmTrading(pmcData, body, sessionID, foundInRaid, upd);
+            // return super.confirmTrading(pmcData, body, sessionID, foundInRaid, upd); - old from SPT 3.5.5
+            return super.confirmTrading(pmcData, body, sessionID);
         }
         catch (error) 
         {
             this.logger.error(error);
             throw "error";
         }
-    }
-
-    /**
-     * @deprecated After testing responses seem to be merging changes automatically. Probably should've tested it before hand fml hahah.
-     * 
-     * Merges multiple "IItemEventRouterResponse"s for a specific user.
-     * Used to merge multiple trade responses when Broker redirects the transaction to other traders.
-     * @param sessionId Session id, Contained response's in "profileChanges".
-     * @param responses Array with responses to merge.
-     * @returns A single merged response.
-     */
-    private mergeResponses(sessionId: string, responses: IItemEventRouterResponse[]): IItemEventRouterResponse
-    {
-        const logPrefix = `[${modInfo.name} ${modInfo.version}]`;
-        const mergedResponse: IItemEventRouterResponse = {warnings: [], profileChanges: {}};
-        for (const response of responses)
-        {
-            mergedResponse.warnings = mergedResponse.warnings.concat(response.warnings);
-            // const profileId = Object.keys(response.profileChanges)[0]; // probably not the best way to do it, but shall do for now
-            const profileChange = response.profileChanges[sessionId] as ProfileChange;
-            if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
-            
-            if (mergedResponse.profileChanges[sessionId] == undefined) 
-            {
-                mergedResponse.profileChanges[sessionId] = {...profileChange};
-            }
-            else 
-            {
-                const mergedProfileChange = mergedResponse.profileChanges[sessionId] as ProfileChange;
-                if (profileChange._id !== mergedProfileChange._id) throw ("Profile id mismatch while meging responses. This probably shouldn't happen. Notify the developer.");
-                mergedProfileChange.experience = Math.max(mergedProfileChange.experience, profileChange.experience);
-                mergedProfileChange.quests = mergedProfileChange.quests.concat(profileChange.quests);
-                mergedProfileChange.ragFairOffers = mergedProfileChange.ragFairOffers.concat(profileChange.ragFairOffers);
-                mergedProfileChange.builds = mergedProfileChange.builds.concat(profileChange.builds);
-                mergedProfileChange.items.new = mergedProfileChange.items.new.concat(profileChange.items.new);
-                mergedProfileChange.items.change = mergedProfileChange.items.change.concat(profileChange.items.change);
-                mergedProfileChange.items.del = mergedProfileChange.items.del.concat(profileChange.items.del);
-
-                // Not sure about the "skills" object
-                if (mergedProfileChange.skills.Points !== profileChange.skills.Points)
-                {
-                    // Don't know if at any point trade response will have any "skills" data, so let it be like this for now.
-                    this.logger.log(`${logPrefix} RESPONSE MERGE EVENT. "skills.Points" between two responses differ. Might not matter for your gameplay(or actually the opposite). Please notify the developer about it.`, LogTextColor.WHITE, LogBackgroundColor.YELLOW);
-                    if (mergedProfileChange.skills.Points < profileChange.skills.Points)
-                        mergedProfileChange.skills.Points += profileChange.skills.Points;
-                }
-                mergedProfileChange.skills.Common = {...mergedProfileChange.skills.Common, ...profileChange.skills.Common};
-                mergedProfileChange.skills.Mastering = {...mergedProfileChange.skills.Mastering, ...profileChange.skills.Mastering};
-
-                // Should probably stay the same between all responses unless maybe you are regenerating, no harm in doing this
-                mergedProfileChange.health = {...profileChange.health};
-
-                // Every response, except for Broker's response will probably contain only one trader.
-                // Broker should contain it's own relations and "ragfair".
-                for (const traderId in profileChange.traderRelations)
-                {
-                    const traderRelation = profileChange.traderRelations[traderId];
-                    const mergedTraderRelation = mergedProfileChange.traderRelations[traderId];
-                    if (mergedTraderRelation == undefined)
-                    {
-                        // If trader hasn't been merged in yet
-                        mergedProfileChange.traderRelations[traderId] = {...traderRelation};
-                    }
-                    else 
-                    {
-                        this.logger.log(`${logPrefix} RESPONSE MERGE EVENT. Multiple responses of the same trader found. Please notify the developer about it.`, LogTextColor.WHITE, LogBackgroundColor.YELLOW);
-                        // If trader has already been merged in. 
-                        // Although probably shouldn't happen unless somehow Broker made several transactions to the same trader.
-                        if ((traderRelation.loyaltyLevel ?? -1) > mergedTraderRelation.loyaltyLevel)
-                            mergedTraderRelation.loyaltyLevel = traderRelation.loyaltyLevel;
-                        if ((traderRelation.salesSum ?? -1) > mergedTraderRelation.salesSum)
-                            mergedTraderRelation.salesSum = traderRelation.salesSum;
-                        if ((traderRelation.standing ?? -1) > mergedTraderRelation.standing)
-                            mergedTraderRelation.standing = traderRelation.standing;
-                        // I don't touch other possibe properties since they'll most likely won't appear in simple trader trade responses.
-                    }
-                }
-                mergedProfileChange.recipeUnlocked = {...mergedProfileChange.recipeUnlocked, ...profileChange.recipeUnlocked};
-                mergedProfileChange.questsStatus = mergedProfileChange.questsStatus.concat(profileChange.questsStatus);
-            }
-        }
-        return mergedResponse;
-    }
-
-    /**
-     * @deprecated Contains a testing messy impelmentation of generating Flea Offers
-     * @param body 
-     * @param pmcData 
-     * @param sessionID 
-     */
-    private fleaSell(body, pmcData, sessionID): void
-    {
-        const container = BrokerPriceManager.instance.container;
-        const sellData = body as IProcessSellTradeRequestData;
-        this.logger.log(JSON.stringify(sellData), LogTextColor.CYAN);
-        const ragfairController: RagfairController = container.resolve<RagfairController>(RagfairController.name);
-        const ragfairOfferHelper: RagfairOfferHelper = container.resolve<RagfairOfferHelper>(RagfairOfferHelper.name);
-        const ragfairSellHelper: RagfairSellHelper = container.resolve<RagfairSellHelper>(RagfairSellHelper.name);
-
-
-        this.logger.log(JSON.stringify(sellData), LogTextColor.CYAN);
-        const offerSellResult: IItemEventRouterResponse[] = [];
-
-        const addOfferResult = ragfairController.addPlayerOffer(pmcData, {Action: "RagFairSellOffer", items: sellData.items.map(item => item.id), requirements: [{_tpl: "5449016a4bdc2d6f028b456f", count: 50000, level: 0, side: 0, onlyFunctional: false}], sellInOnePiece: false }, sessionID);
-        offerSellResult.push(addOfferResult);
-        // const playerOffers = ragfairOfferHelper.getProfileOffers(sessionID);
-        const playerOffers = this.ragfairServer.getOffers().filter(offer => offer.user.id === pmcData._id);
-                
-        this.logger.error(`ADD OFFER RESULT:   ${JSON.stringify(addOfferResult)}`);
-        for (const offer of playerOffers)
-        {
-            this.logger.log(`OFFER ID: ${offer._id} OFFER BODY: ${JSON.stringify(offer)}`, LogTextColor.YELLOW);
-            const itemCount = offer.items[0].upd.StackObjectsCount;
-            const originalItemCount = offer.items[0].upd.OriginalStackObjectsCount;
-            const alreadyBoughtCount = offer.sellResult.map(sellRes => sellRes.amount).reduce((accum, curr) => accum+curr, 0);
-            //this.logger.log(`${itemCount} - ${originalItemCount} - ${alreadyBoughtCount}`, LogTextColor.RED);
-
-            // if (offer.sellResult != undefined && (offer.sellResult.length === 0 || offer.sellResult.map(sellRes => sellRes.amount).reduce((accum, curr) => accum+curr, 0) < originalItemCount))
-            // {
-            // const completeResult = ragfairOfferHelper.completeOffer(sessionID, offer, itemCount);
-            if (this.ragfairServer.doesOfferExist(offer._id)) this.logger.log(`OFFER ${offer._id} EXISTS BEFORE COMPLETING`, LogTextColor.CYAN);
-            // this.ragfairServer.hideOffer(offer._id);
-            // const completeResult = ragfairOfferHelper.completeOffer(sessionID, offer, itemCount);
-            // if (this.ragfairServer.doesOfferExist(offer._id)) this.logger.log(`OFFER ${offer._id} EXISTS`, LogTextColor.CYAN);
-            // this.logger.error(`COMPLETE OFFER RESULT:   ${JSON.stringify(completeResult)}`);
-            // pmcData.RagfairInfo.rating += 100000/50000*0.01;
-            this.logger.log(`PMC RAGFAIR DATA:  ${JSON.stringify(this.profileHelper.getPmcProfile(sessionID).RagfairInfo.rating)}`, LogTextColor.CYAN);
-
-            // offerSellResult.push(completeResult);
-        }
-
-        const reducedResponse = offerSellResult.reduce((accum, curr) => 
-        {
-            accum.warnings = accum.warnings.concat(curr.warnings);
-            accum.profileChanges = {...accum.profileChanges, ...curr.profileChanges} as TProfileChanges;
-            for (const profileId in accum.profileChanges)
-            {
-                // accum.profileChanges[profileId].ragFairOffers = [];
-                // accum.profileChanges[profileId].traderRelations["ragfair"].salesSum*=2;
-            }
-                    
-            return accum;
-        }, {warnings: [] as Warning[], profileChanges: {} as TProfileChanges});
-        // this.logger.error(JSON.stringify(reducedResponse));
-        // warnings: Warning[];
-        // profileChanges: TProfileChanges | "";
-        // return reducedResponse;
-
-        // {
-        //     _id: string;
-        //     _tpl: string;
-        //     parentId?: string;
-        //     slotId?: string;
-        //     location?: Location | number;
-        //     upd?: Upd;
-        // }
-        // const offerItems = sellData.items.map(item => {
-        //     const itemTemplate = this.itemHelper.getItem()
-        //     return {_id: }
-        // });
-        // const offer = ragfairController.createPlayerOffer(this.profileHelper.getFullProfile(sessionID), [{_tpl: "5449016a4bdc2d6f028b456f", count: 1, level: 0, side: 0, onlyFunctional: false}], );
-                
-        // return this.tradeHelper.sellItem(pmcData, sellData, sessionID);
-        // return addOfferResult;
     }
 
     /**

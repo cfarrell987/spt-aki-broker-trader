@@ -24,7 +24,7 @@ namespace BrokerTraderPlugin.Reflections.Extensions
                 "GetAllItemsFromCollection",
                 "GetAllItemsFromCollections",
                 "FilterNullContainers",
-                "GetAllMergedItems",
+                //"GetAllMergedItems", - not present, anymore (maybe since SPT 3.7.1)
                 "GetAllItemsNonAlloc",
                 "GetTopLevelItemsFromCollection"
             };

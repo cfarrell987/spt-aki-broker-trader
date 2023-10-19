@@ -209,11 +209,11 @@ export class BrokerPriceManager
     private initializeCurrencyBuyRates()
     {
         // Get USD and EUR prices from PK and Skier assorts
-        const pkAssort = this.traderHelper.getTraderAssortsById(Traders.PEACEKEEPER);
+        const pkAssort = this.traderHelper.getTraderAssortsByTraderId(Traders.PEACEKEEPER);
         const pkUsdItemId = pkAssort.items.find(item => item._tpl === Money.DOLLARS)._id;
         const pkDollarPrice = pkAssort.barter_scheme[pkUsdItemId][0][0].count;
 
-        const skiAssort = this.traderHelper.getTraderAssortsById(Traders.SKIER);
+        const skiAssort = this.traderHelper.getTraderAssortsByTraderId(Traders.SKIER);
         const skiEurItemId = skiAssort.items.find(item => item._tpl === Money.EUROS)._id;
         const skiEuroPrice = skiAssort.barter_scheme[skiEurItemId][0][0].count;
 
