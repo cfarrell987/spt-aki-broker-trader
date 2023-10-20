@@ -27,34 +27,43 @@ using BrokerTraderPlugin.Reflections.Extensions;
 
 namespace BrokerPatch
 {
-    //  Pull the TraderClass enumerable from EFT.UI.MerchantsList
-    public class PatchMerchantsList : ModulePatch
+    //  Initialize PriceMaganer properties with values from EFT.UI.TraderScreensGroup before they can be used in later patches.
+    public class PatchTraderScreensGroup : ModulePatch
     {
         protected override MethodBase GetTargetMethod()
         {
-            return typeof(MerchantsList).GetMethod("Show", BindingFlags.Instance | BindingFlags.Public);
+            return typeof(TraderScreensGroup).GetMethod("Show", BindingFlags.Instance | BindingFlags.Public);
         }
 
-        [PatchPostfix]
-        private static void PatchPostfix(MerchantsList __instance, IEnumerable<TraderClass> tradersList, ISession session)
+        [PatchPrefix]
+        private static bool PatchPrefix(TraderScreensGroup __instance, object controller)
         {
-            // Get supported TraderClass instancess to work with.
             try
             {
+                // Grab list of traders and session instance from the controller.
+                var tradersList = controller.GetFieldValue<IEnumerable<TraderClass>>("TradersList");
+                var session = controller.GetFieldValue<ISession>("Session");
+
+                // Get supported TraderClass instancess to work with.
                 TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && (PriceManager.ModConfig.TradersIgnoreUnlockedStatus || trader.RInfo().Unlocked));
-                Session = session; // session is actually one of the args, bruh
+                Session = session;
                 BackendCfg = Singleton<BackendConfigSettingsClass>.Instance;
+
                 if (Session == null) throw new Exception("Session is null.");
+
+                // Continue running original code.
+                return true;
             }
             catch (Exception ex)
             {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during MerchantsList patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during TraderScreensGroup patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
                 NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
                 throw ex;
             }
         }
     }
+    
     //  Patch price calculation method in TraderClass
     public class PatchGetUserItemPrice : ModulePatch
     {
@@ -116,6 +125,9 @@ namespace BrokerPatch
     {
         protected override MethodBase GetTargetMethod()
         {
+            // For reference: the "method_10" is no longer relevant in the current version, as of 3.7.1 it's method_16.
+            // This info is in general not much relevant but I suppose gives at least a little bit of direction.
+            //
             // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
             // method_10 is still the same for 3.5.5. Identifying by CIL instructions could be used but that's a pretty unnecessary stretch.
 
@@ -134,6 +146,12 @@ namespace BrokerPatch
         private static readonly FieldInfo TraderField;
         // Constructor will run before patch is enabled.
         // Unlike GetTargetMethod, the patched code will run multiple times so reflection search results should be cached.
+        //
+        // TODO: This could be removed and rewritten with the use of ReflectionHelper since I've already implemented caching there.
+        // But for some reason there are 2 instances of TraderClass type in TraderDealScreen.
+        // As far as it's code goes it seems that both of them will have the same value which is assigned in the Show() method.
+        //
+        // Shouldn't touch it as long as it works, I guess.
         static PatchEquivalentSum()
         {
             TraderField = typeof(TraderDealScreen).GetFields(AccessTools.allDeclared).FirstOrDefault(field => field.FieldType == typeof(TraderClass) && !field.IsPublic);
@@ -147,28 +165,36 @@ namespace BrokerPatch
                 // Search for trader fiels by type instead of a generic name.
                 if (TraderField.GetValue(__instance) is not TraderClass trader) throw new Exception("TraderDealScreen. Found trader field is null.");
                 //var ____equivalentSumValue = typeof(TraderDealScreen).GetField("_equivalentSumValue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance) as TextMeshProUGUI;
-                if (trader.Id == BROKER_TRADER_ID)
+
+                // With the new 13.5 (or whatever it was) trader screen, they seem to have an array of TMP_Text objects
+                // and for some reason they seem to loop through the whole array and apply the SAME value to each object.
+
+                // This method seems to be called every time you add or remove an item from the sell table, if I'm not mistaken.
+                foreach (TMP_Text tpmText in ____equivalentSumValue)
                 {
-                    // source is a list of ItemPrices, reference ItemPriceReflection.
-                    var source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
-                    if (!source.Any()) ____equivalentSumValue.text = "";
-                    else
+                    if (trader.Id == BROKER_TRADER_ID)
                     {
-                        var groupByCurrency = source.GroupBy(ItemPrice.GetCurrencyId).Select(currencyGroup => new
+                        // source is a list of ItemPrices, reference ItemPriceReflection.
+                        var source = trader.CurrentAssortment.SellingStash.Containers.First().Items.Select(GetBestItemPrice).Where(itemPrice => itemPrice != null).ToList();
+                        if (!source.Any()) tpmText.text = "";
+                        else
                         {
-                            CurrencyId = currencyGroup.Key,
-                            Amount = currencyGroup.Sum(ItemPrice.GetAmount),
-                        });
-                        // Rouble amount has to be always first. Since Broker's main currency is RUB.
-                        ____equivalentSumValue.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
-                        foreach (var currency in groupByCurrency.Where(group => group.CurrencyId != CurrencyHelper.ROUBLE_ID))
-                        {
-                            ____equivalentSumValue.text += $" + {CurrencyHelper.GetCurrencyCharById(currency.CurrencyId)} {currency.Amount}";
+                            var groupByCurrency = source.GroupBy(ItemPrice.GetCurrencyId).Select(currencyGroup => new
+                            {
+                                CurrencyId = currencyGroup.Key,
+                                Amount = currencyGroup.Sum(ItemPrice.GetAmount),
+                            });
+                            // Rouble amount has to be always first. Since Broker's main currency is RUB.
+                            tpmText.text = groupByCurrency.Where(group => group.CurrencyId == CurrencyHelper.ROUBLE_ID).Select(group => group.Amount).FirstOrDefault().ToString();
+                            foreach (var currency in groupByCurrency.Where(group => group.CurrencyId != CurrencyHelper.ROUBLE_ID))
+                            {
+                                tpmText.text += $" + {CurrencyHelper.GetCurrencyCharById(currency.CurrencyId)} {currency.Amount}";
+                            }
                         }
                     }
+                    Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))");
+                    tpmText.text = regex.Replace(tpmText.text, " ");
                 }
-                Regex regex = new Regex("\\B(?=(\\d{3})+(?!\\d))");
-                ____equivalentSumValue.text = regex.Replace(____equivalentSumValue.text, " ");
             }
             catch (Exception ex)
             {
@@ -184,7 +210,6 @@ namespace BrokerPatch
     {
         protected override MethodBase GetTargetMethod()
         {
-            // method_10 assigns a sprite and text value to "_equivalentSum" when selling items
             return typeof(TraderDealScreen).GetMethod("Show", BindingFlags.Instance | BindingFlags.Public);
         }
 

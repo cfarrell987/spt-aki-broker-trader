@@ -1,5 +1,6 @@
 ﻿using BepInEx.Logging;
 using EFT;
+using EFT.UI;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -13,6 +14,8 @@ namespace BrokerTraderPlugin.Reflections
     /// <summary>
     /// Extension and helper class to simplify reflection.
     /// Also uses cache which allows using reflection in loops without performance loss.
+    /// 
+    /// Can be extended as needed since it mostly has extensions for instantiated objects and lacks extensions to work with static type fields/methods/etc.
     /// </summary>
     internal static class ReflectionHelper
     {
@@ -288,6 +291,35 @@ namespace BrokerTraderPlugin.Reflections
             return property;
         }
 
+        private static PropertyInfo GetPropertyWithCache(Type type, Type propertyType)
+        {
+            var key = GenerateCacheKey(type, propertyType);
+            // try to get from cache
+            if (TryGetFromCache(key, out PropertyInfo cached))
+            {
+                return cached;
+            }
+
+            var searchResults = type.GetProperties(AccessTools.all).Where(property => property.PropertyType == propertyType);
+            var resultCount = searchResults.Count();
+            if (resultCount < 1) throw GetNotFoundException(key);
+            if (resultCount > 1)
+            {
+                Logger.LogWarning($"ReflectionHelper.GetPropertyWithCache [AmbiguousMatch-Key]: {key}");
+                foreach (var result in searchResults)
+                {
+                    Logger.LogWarning($"ReflectionHelper.GetPropertyWithCache [AmbiguousMatch]: of type {result.PropertyType} with name {result.Name}");
+                }
+                throw new AmbiguousMatchException($"ReflectionHelper.GetPropertyWithCache [AmbiguousMatch-Key]: {key}");
+            }
+
+            var property = searchResults.First();
+
+            // cache if found
+            AddToCache(key, property);
+            return property;
+        }
+
         private static MethodInfo GetMethodWithCache(Type type, string name, Type[] methodArgTypes = null)
         {
             var key = GenerateCacheKey(type, name, methodArgTypes);
@@ -334,6 +366,9 @@ namespace BrokerTraderPlugin.Reflections
             return method.Invoke(null, args);
         }
 
+        //
+        //If you get "Exception has been thrown by the target of an invocation." - that means the field/property you are trying to get a value of is NULL.
+        //
         public static object GetFieldValue(this Type staticType, string name)
         {
             return GetField(staticType, name).GetValue(null);
@@ -470,16 +505,25 @@ namespace BrokerTraderPlugin.Reflections
             return default;
         }
 
-        public static T GetPropertyValue<T>(this object targetObj, string name)
+        // As Object
+        //
+        //If you get "Exception has been thrown by the target of an invocation." - that means the field/property you are trying to get a value of is NULL.
+        //
+        public static object GetPropertyValue(this object targetObj, string name)
         {
-            return (T)targetObj.GetPropertyValue(name);
+            return targetObj.GetProperty(name).GetValue(targetObj);
         }
 
-        public static bool TryGetPropertyValue<T>(this object targetObj, string name, out T value)
+        public static object GetPropertyValue(this object targetObj, Type propertyType)
+        {
+            return targetObj.GetProperty(propertyType).GetValue(targetObj);
+        }
+
+        public static bool TryGetPropertyValue(this object targetObj, string name, out object value)
         {
             try
             {
-                value = targetObj.GetPropertyValue<T>(name);
+                value = targetObj.GetPropertyValue(name);
                 return true;
             }
             catch
@@ -489,25 +533,11 @@ namespace BrokerTraderPlugin.Reflections
             }
         }
 
-        public static T GetPropertyValueOrDefault<T>(this object targetObj, string name)
-        {
-            if (targetObj.TryGetPropertyValue(name, out T value))
-            {
-                return value;
-            }
-            return default;
-        }
-
-        public static object GetPropertyValue(this object targetObj, string name)
-        {
-            return targetObj.GetProperty(name).GetValue(targetObj);
-        }
-
-        public static bool TryGetPropertyValue(this object targetObj, string name, out object value)
+        public static bool TryGetPropertyValue(this object targetObj, Type propertyType, out object value)
         {
             try
             {
-                value = targetObj.GetPropertyValue(name);
+                value = targetObj.GetPropertyValue(propertyType);
                 return true;
             }
             catch
@@ -526,6 +556,73 @@ namespace BrokerTraderPlugin.Reflections
             return default;
         }
 
+        public static object GetPropertyValueOrDefault(this object targetObj, Type propertyType)
+        {
+            if (targetObj.TryGetPropertyValue(propertyType, out object value))
+            {
+                return value;
+            }
+            return default;
+        }
+
+        // With Generics
+        public static T GetPropertyValue<T>(this object targetObj, string name)
+        {
+            return (T)targetObj.GetPropertyValue(name);
+        }
+
+        public static T GetPropertyValue<T>(this object targetObj)
+        {
+            return (T)targetObj.GetPropertyValue(typeof(T));
+        }
+
+        public static bool TryGetPropertyValue<T>(this object targetObj, string name, out T value)
+        {
+            try
+            {
+                value = targetObj.GetPropertyValue<T>(name);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        public static bool TryGetPropertyValue<T>(this object targetObj, out T value)
+        {
+            try
+            {
+                value = targetObj.GetPropertyValue<T>();
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
+        }
+
+        public static T GetPropertyValueOrDefault<T>(this object targetObj, string name)
+        {
+            if (targetObj.TryGetPropertyValue(name, out T value))
+            {
+                return value;
+            }
+            return default;
+        }
+
+        public static T GetPropertyValueOrDefault<T>(this object targetObj)
+        {
+            if (targetObj.TryGetPropertyValue(out T value))
+            {
+                return value;
+            }
+            return default;
+        }
+
+        // Object extensions
         public static FieldInfo GetField(this object targetObj, string name)
         {
             return GetFieldWithCache(targetObj.GetType(), name);
@@ -536,11 +633,19 @@ namespace BrokerTraderPlugin.Reflections
             return GetPropertyWithCache(targetObj.GetType(), name);
         }
 
+        public static PropertyInfo GetProperty(this object targetObj, Type propertyType)
+        {
+            return GetPropertyWithCache(targetObj.GetType(), propertyType);
+        }
+
         public static MethodInfo GetMethod(this object targetObj, string name, Type[] methodArgTypes = null)
         {
             return GetMethodWithCache(targetObj.GetType(), name, methodArgTypes);
         }
 
+        // Type extensions
+        // Potential TODO: Implement more reflection methods for static types,
+        // similar to object extensions which use the methods above this comment.            
         public static FieldInfo GetField(this Type staticType, string name)
         {
             return GetFieldWithCache(staticType, name);
@@ -549,6 +654,11 @@ namespace BrokerTraderPlugin.Reflections
         public static PropertyInfo GetProperty(this Type staticType, string name)
         {
             return GetPropertyWithCache(staticType, name);
+        }
+
+        public static PropertyInfo GetProperty(this Type staticType, Type propertyType)
+        {
+            return GetPropertyWithCache(staticType, propertyType);
         }
 
         public static MethodInfo GetMethod(this Type staticType, string name, Type[] methodArgTypes = null)
