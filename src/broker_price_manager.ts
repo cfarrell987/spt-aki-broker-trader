@@ -849,8 +849,7 @@ export class BrokerPriceManager
             if (
                 offer.user?.memberType === MemberCategory.TRADER || // no trader offers
                     offer.items.length < 1 || // additional reliability measure
-                    // offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
-                    offer.requirements.some(requirement => Money.ROUBLES === requirement._tpl) || // only rouble offers (no barters obviously)
+                    offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
                     modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 || // only "operational" weapon offers if config specifies
                     !modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length > 1 ||// only "not operational" weapon offers if config specifies
                     !this.presetHelper.hasPreset(firstItem._tpl) && offer.sellInOnePiece // for non-template items ignore "bulk" offers
@@ -875,7 +874,7 @@ export class BrokerPriceManager
                 const bPointsData = this.componentHelper.getRagfairItemComponentPoints(b.items[0]);
                 const maxPointsComparison = bPointsData.maxPoints - aPointsData.maxPoints;
                 const pointsComparison = bPointsData.points - aPointsData.points;
-                const requirementsCostComparison = a.requirementsCost - b.requirementsCost;
+                const requirementsCostComparison = a.requirementsCost - b.requirementsCost; // requirementsCost is always rouble equivalent even if offer requires USD/EUR
                 return maxPointsComparison || pointsComparison || requirementsCostComparison;
             });
             // After sorting the first item should have the lowest price and highest condition
