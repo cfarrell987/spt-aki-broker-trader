@@ -851,43 +851,70 @@ export class BrokerPriceManager
             if (
                 offer.user?.memberType === MemberCategory.TRADER || // no trader offers
                 offer.items.length < 1 || // additional reliability measure
-                offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
-                modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 || // only "operational" offers if config specifies
-                !modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length > 1 // only "not operational" offers if config specifies
-            ) return false;    
+                // offer.requirements.some(requirement => !Object.keys(Money).some(currencyName => Money[currencyName] === requirement._tpl)) || // no barter offers
+                offer.requirements.some(requirement => Money.ROUBLES === requirement._tpl) || // only rouble offers (no barters obviously)
+                modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length === 1 || // only "operational" weapon offers if config specifies
+                !modConfig.ragfairIgnoreAttachments && this.presetHelper.hasPreset(firstItem._tpl) && offer.items.length > 1 ||// only "not operational" weapon offers if config specifies
+                !this.presetHelper.hasPreset(firstItem._tpl) && offer.sellInOnePiece // for non-template items ignore "bulk" offers
+            ) return false;
             const pointsData = this.componentHelper.getRagfairItemComponentPoints(firstItem);
             const originalMaxPtsBoundary = pointsData.templateMaxPoints * 0.85; // 85% of max capacity
             const hasMoreThan85PercentPoints = pointsData.points >= originalMaxPtsBoundary && pointsData.maxPoints >= originalMaxPtsBoundary;
             return hasMoreThan85PercentPoints; 
         });
-        //console.log(`[BROKER] ${itemTplId} COUNT OFFERS => ${JSON.stringify(this.ragfairOfferService.getOffersOfType(itemTplId)?.length)}`);
-        // Some items might have no offers on flea (some event stuff, e.g. jack-o-lantern) so getOffersOfType will return "undefined"
-        const avgPrice = validOffersForItemTpl?.length > 0
-            ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
-            //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.
-            // getDynamicPriceForItem might return "undefined" for some reason, so check for it (getStaticPriceForItem too just in case)
-            : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
-            
-        //Some Items like Santa hat/Ushanka etc. have no durability displayed, but have an actual current durability and max durability.
-        //Test how it influences their price.
 
-        // if (itemTplId === "5447a9cd4bdc2dbd208b4567")
-        // {
-        //     // console.log(`[MIN_AVG_MAX] ${JSON.stringify(minMaxAvg)}`);
-        //     console.log(`[Offers count] ${JSON.stringify(validOffersForItemTpl?.length)}`)
-        //     validOffersForItemTpl?.forEach(offer => 
-        //     {
-        //         console.log(`[requirements cost] ${JSON.stringify(offer.requirements)}`)
-        //         console.log(`[requirements cost] ${JSON.stringify(offer.requirementsCost)}`)
-        //     });
-        //     console.log(`[avg price] ${Math.round(avgPrice)}`)
-        //     console.log(`[per point] ${Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))}`)
-        // }
-        return avgPrice;
-        // return {
-        //     avgPrice: Math.round(avgPrice),
-        //     pricePerPoint: Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))
-        // };
+        // If somehow there were no valid offers (may happen sometimes, usually with event items like pumpkin masks)
+        // meaning: validOffersForItemTpl might be 'undefined'
+        if (validOffersForItemTpl == null || validOffersForItemTpl?.length < 1)
+        {
+            // TODO: maybe should change to min instead.
+            return Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
+        }
+
+        if (modConfig.ragfairUseLowestPrice)
+        {
+            return Math.min(...(validOffersForItemTpl.map(offer => offer.requirementsCost)));
+        }
+
+        // Gets average price
+        return validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length;
+
+        // TODO: Old code, refactored code is above
+        // ----- ----- ----- ----- ----- 
+        // const avgPrice = validOffersForItemTpl?.length > 0
+        //     ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
+        //     //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.
+        //     // getDynamicPriceForItem might return "undefined" for some reason, so check for it (getStaticPriceForItem too just in case)
+        //     : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
+
+        // //console.log(`[BROKER] ${itemTplId} COUNT OFFERS => ${JSON.stringify(this.ragfairOfferService.getOffersOfType(itemTplId)?.length)}`);
+        // // Some items might have no offers on flea (some event stuff, e.g. jack-o-lantern) so getOffersOfType will return "undefined"
+        // const avgPrice = validOffersForItemTpl?.length > 0
+        //     ? validOffersForItemTpl.map(offer => offer.requirementsCost).reduce((accum, curr) => accum+curr, 0) / validOffersForItemTpl.length
+        //     //Get the bigger price, either static or dynamic. Makes sense most of the time to approximate actual flea price when you have no existing offers.
+        //     // getDynamicPriceForItem might return "undefined" for some reason, so check for it (getStaticPriceForItem too just in case)
+        //     : Math.max(this.ragfairPriceService.getStaticPriceForItem(itemTplId) ?? 0, this.ragfairPriceService.getDynamicPriceForItem(itemTplId) ?? 0);
+            
+        // //Some Items like Santa hat/Ushanka etc. have no durability displayed, but have an actual current durability and max durability.
+        // //Test how it influences their price.
+
+        // // if (itemTplId === "5447a9cd4bdc2dbd208b4567")
+        // // {
+        // //     // console.log(`[MIN_AVG_MAX] ${JSON.stringify(minMaxAvg)}`);
+        // //     console.log(`[Offers count] ${JSON.stringify(validOffersForItemTpl?.length)}`)
+        // //     validOffersForItemTpl?.forEach(offer => 
+        // //     {
+        // //         console.log(`[requirements cost] ${JSON.stringify(offer.requirements)}`)
+        // //         console.log(`[requirements cost] ${JSON.stringify(offer.requirementsCost)}`)
+        // //     });
+        // //     console.log(`[avg price] ${Math.round(avgPrice)}`)
+        // //     console.log(`[per point] ${Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))}`)
+        // // }
+        // return avgPrice;
+        // // return {
+        // //     avgPrice: Math.round(avgPrice),
+        // //     pricePerPoint: Math.round(avgPrice / this.getOriginalMaxPointsByItemTplId(itemTplId))
+        // // };
     }
 
     public getSingleItemRagfairPrice(item: Item): number

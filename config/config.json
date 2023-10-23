@@ -8,6 +8,7 @@
     "buyRateEuro": 1,
     "profitCommissionPercentage": 0,
     "useRagfair": true,
+    "ragfairUseLowestPrice": true,
     "ragfairIgnoreAttachments": true,
     "ragfairIgnorePlayerLevel": false,
     "ragfairIgnoreFoundInRaid": false,
