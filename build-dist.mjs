@@ -88,6 +88,15 @@ async function main()
     // Get the current directory where the script is being executed
     const currentDir = getCurrentDirectory();
 
+    const sptAkiLocation = "D:\\SPT-AKI\\SPTARKOV\\SPTARKOV 371";
+    const sptAkiModsLocation = path.join(sptAkiLocation, "user\\mods");
+    const sptAkiPluginsLocation = path.join(sptAkiLocation, "BepInEx\\plugins");
+
+    // TODO: include version in bepinex plugin name
+    const pluginBaseName = "BrokerTraderPlugin"; // Meaning name without the version.
+    const pluginFullName = `${pluginBaseName}.dll`;
+    const pluginBuildLocation = path.join(currentDir, "client-side\\BrokerTraderPlugin\\bin\\Debug\\net472", pluginFullName);
+
     // Defining at this scope because we need to use it in the finally block.
     let projectDir;
 
@@ -117,28 +126,44 @@ async function main()
         await copyFiles(currentDir, projectDir, buildIgnorePatterns);
         logger.log("success", "Files successfully copied to temporary directory.");
 
-        // Create a zip archive of the project files.
+        // Prepare the server part
+        logger.log("info", "Moving server mod to dist directory");
+        await fs.move(projectDir, path.join(distDir, "user\\mods\\", projectName));
+        logger.log("success", "Successfully moved the server mod to dist directory");
+        
+        // Prepare the client plugin
+        if (await fs.pathExists(pluginBuildLocation))
+        {
+            await fs.copy(pluginBuildLocation, path.join(distDir, "BepInEx\\plugins", pluginFullName));
+            logger.log("success", "Copied the client plugin to dist directory");
+        }
+        else 
+        {
+            logger.log("error", `Client plugin build not found at: ${pluginBuildLocation}. If the location is correct, built it with Visual Studio before running this script.`);
+        }
+
+        // Create a zip distribution archive
         logger.log("info", "Beginning folder compression...");
         const zipFilePath = path.join(path.dirname(projectDir), `${projectName}.zip`);
-        await createZipFile(projectDir, zipFilePath, "user/mods/" + projectName);
+        await createZipFile(distDir, zipFilePath, "/");
         logger.log("success", "Archive successfully created.");
         logger.log("info", zipFilePath);
 
         // Move the zip file inside of the project directory, within the temporary working directory.
-        const zipFileInProjectDir = path.join(projectDir, `${projectName}.zip`);
-        await fs.move(zipFilePath, zipFileInProjectDir);
+        const zipFileInDistDir = path.join(distDir, `${projectName}.zip`);
+        await fs.move(zipFilePath, zipFileInDistDir);
         logger.log("success", "Archive successfully moved.");
-        logger.log("info", zipFileInProjectDir);
+        logger.log("info", zipFileInDistDir);
 
         // Move the temporary directory into the distribution directory.
-        await fs.move(projectDir, distDir);
-        logger.log("success", "Temporary directory successfully moved into project distribution directory.");
+        // await fs.move(projectDir, distDir);
+        // logger.log("success", "Temporary directory successfully moved into project distribution directory.");
 
         // Log the success message. Write out the path to the mod package.
         logger.log("success", "------------------------------------");
         logger.log("success", "Build script completed successfully!");
         logger.log("success", "Your mod package has been created in the 'dist' directory:");
-        logger.log("success", `/${path.relative(process.cwd(), path.join(distDir, `${projectName}.zip`))}`);
+        logger.log("success", `\\${path.relative(process.cwd(), path.join(distDir, `${projectName}.zip`))}`);
         logger.log("success", "------------------------------------");
         if (!verbose) 
         {
@@ -248,6 +273,16 @@ function createProjectName(packageJson)
 
     // Ensure the name is lowercase, as per the package.json specification.
     return `${author}-${name}-${version}`.toLowerCase();
+}
+
+function getProjectNameWithoutVersion(packageJson) 
+{
+    // Remove any non-alphanumeric characters from the author and name.
+    const author = packageJson.author.replace(/\W/g, "");
+    const name = packageJson.name.replace(/\W/g, "");
+
+    // Ensure the name is lowercase, as per the package.json specification.
+    return `${author}-${name}`.toLowerCase();
 }
 
 /**
