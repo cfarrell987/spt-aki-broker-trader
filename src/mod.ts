@@ -24,7 +24,7 @@ import { BrokerPriceManager } from "./broker_price_manager";
 import { Traders } from "@spt-aki/models/enums/Traders";
 import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
 import { DynamicRouterModService } from "@spt-aki/services/mod/dynamicRouter/DynamicRouterModService"
-import { BrokerTraderRouter } from "./broker_trade_router";
+import { BrokerTraderRouter } from "./broker_trader_router";
 import { IPostAkiLoadMod } from "@spt-aki/models/external/IPostAkiLoadMod";
 import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
 import { FixedItemBaseClassService } from "./temporary_ItemBaseClassService_fix";
