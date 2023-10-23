@@ -31,8 +31,6 @@ namespace BrokerTraderPlugin
                     RuntimeHelpers.RunClassConstructor(typeof(PriceHelper).TypeHandle);
                     RuntimeHelpers.RunClassConstructor(typeof(ItemHelper).TypeHandle);
 
-                    //new PatchMerchantsList().Enable(); // Should be first to pull trader list and some other data into PriceManager.
-                    new PatchTraderScreensGroup().Enable(); // Should be first to pull trader list and some other data into PriceManager.
                     if (PriceManager.ModConfig.UseRagfair)
                     {
                         new PatchRefreshRagfairOnTraderScreenShow().Enable(); // Refresh ragfair prices before opening Broker trader screen

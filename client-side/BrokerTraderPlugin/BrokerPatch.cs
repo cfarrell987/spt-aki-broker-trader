@@ -27,43 +27,6 @@ using BrokerTraderPlugin.Reflections.Extensions;
 
 namespace BrokerPatch
 {
-    //  Initialize PriceMaganer properties with values from EFT.UI.TraderScreensGroup before they can be used in later patches.
-    public class PatchTraderScreensGroup : ModulePatch
-    {
-        protected override MethodBase GetTargetMethod()
-        {
-            return typeof(TraderScreensGroup).GetMethod("Show", BindingFlags.Instance | BindingFlags.Public);
-        }
-
-        [PatchPrefix]
-        private static bool PatchPrefix(TraderScreensGroup __instance, object controller)
-        {
-            try
-            {
-                // Grab list of traders and session instance from the controller.
-                var tradersList = controller.GetFieldValue<IEnumerable<TraderClass>>("TradersList");
-                var session = controller.GetFieldValue<ISession>("Session");
-
-                // Get supported TraderClass instancess to work with.
-                TradersList = tradersList.Where((trader) => SupportedTraderIds.Contains(trader.Id) && (PriceManager.ModConfig.TradersIgnoreUnlockedStatus || trader.RInfo().Unlocked));
-                Session = session;
-                BackendCfg = Singleton<BackendConfigSettingsClass>.Instance;
-
-                if (Session == null) throw new Exception("Session is null.");
-
-                // Continue running original code.
-                return true;
-            }
-            catch (Exception ex)
-            {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during TraderScreensGroup patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
-                Logger.LogError(msg);
-                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
-                throw ex;
-            }
-        }
-    }
-    
     //  Patch price calculation method in TraderClass
     public class PatchGetUserItemPrice : ModulePatch
     {

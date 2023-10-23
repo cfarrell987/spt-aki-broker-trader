@@ -14,6 +14,8 @@ using Newtonsoft.Json;
 using BrokerTraderPlugin.Reflections;
 using EFT.Communications;
 using BrokerTraderPlugin.Reflections.Extensions;
+using Comfort.Common;
+using Aki.Reflection.Utils;
 
 namespace BrokerTraderPlugin
 {
@@ -141,14 +143,27 @@ namespace BrokerTraderPlugin
     internal static class PriceManager
     {
         public const string BROKER_TRADER_ID = "broker-trader-id"; // "Currency ex. Broker tid" is handled serverside.
-        public static ISession Session { get; set; }
+
+        public static ISession Session => ClientAppUtils.GetMainApp().GetClientBackEndSession();
+        public static BackendConfigSettingsClass BackendCfg => Singleton<BackendConfigSettingsClass>.Instance;
+
         public static ModConfig ModConfig { get; set; }
         public static readonly ENotificationDurationType ModNotificationDuration;
-        public static BackendConfigSettingsClass BackendCfg { get; set; }
         public static readonly string[] SupportedTraderIds = new string[0];
         public static readonly RagfairPrices RagfairPriceSource;
         public static readonly double RagfairSellRepGain;
-        public static IEnumerable<TraderClass> TradersList { get; set; } = null;
+        private static IEnumerable<TraderClass> _traderList;
+        public static IEnumerable<TraderClass> TradersList
+        {
+            get
+            {
+                if (_traderList == null)
+                {
+                    _traderList = Session.Traders.Where((trader) => SupportedTraderIds.Contains(trader.Id) && (ModConfig.TradersIgnoreUnlockedStatus || trader.RInfo().Unlocked));
+                }
+                return _traderList;
+            }
+        }
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
         public static Dictionary<string, double> CurrencyBasePrices { get; set; } = new Dictionary<string, double>();
         // Requests in a static constructor will be performed only once for initialization.
