@@ -1,68 +1,70 @@
-import { TradeController } from "@spt-aki/controllers/TradeController";
-import { ItemHelper } from "@spt-aki/helpers/ItemHelper";
-import { ProfileHelper } from "@spt-aki/helpers/ProfileHelper";
-import { TradeHelper } from "@spt-aki/helpers/TradeHelper";
-import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
-import { Item, Upd } from "@spt-aki/models/eft/common/tables/IItem";
-import { IItemEventRouterResponse } from "@spt-aki/models/eft/itemEvent/IItemEventRouterResponse";
-import { IProcessBaseTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBaseTradeRequestData";
-import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
-import { LogTextColor } from "@spt-aki/models/spt/logging/LogTextColor";
-import { ILogger } from "@spt-aki/models/spt/utils/ILogger";
-import { EventOutputHolder } from "@spt-aki/routers/EventOutputHolder";
-import { ConfigServer } from "@spt-aki/servers/ConfigServer";
-import { RagfairServer } from "@spt-aki/servers/RagfairServer";
-import { LocalisationService } from "@spt-aki/services/LocalisationService";
-import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
+import { TradeController } from "@spt/controllers/TradeController";
+import { ItemHelper } from "@spt/helpers/ItemHelper";
+import { ProfileHelper } from "@spt/helpers/ProfileHelper";
+import { TradeHelper } from "@spt/helpers/TradeHelper";
+import { IPmcData } from "@spt/models/eft/common/IPmcData";
+import { Item } from "@spt/models/eft/common/tables/IItem";
+import { IItemEventRouterResponse } from "@spt/models/eft/itemEvent/IItemEventRouterResponse";
+import { IProcessBaseTradeRequestData } from "@spt/models/eft/trade/IProcessBaseTradeRequestData";
+import { IProcessSellTradeRequestData } from "@spt/models/eft/trade/IProcessSellTradeRequestData";
+import { LogTextColor } from "@spt/models/spt/logging/LogTextColor";
+import { ILogger } from "@spt/models/spt/utils/ILogger";
+import { EventOutputHolder } from "@spt/routers/EventOutputHolder";
+import { ConfigServer } from "@spt/servers/ConfigServer";
+import { RagfairServer } from "@spt/servers/RagfairServer";
+import { LocalisationService } from "@spt/services/LocalisationService";
+import { HttpResponseUtil } from "@spt/utils/HttpResponseUtil";
 import { inject, injectable } from "tsyringe";
 
-import {RagfairController} from "@spt-aki/controllers/RagfairController";
 
 import * as baseJson from "../db/base.json";
 import modInfo from "../package.json";
 import modConfig from "../config/config.json";
 
-import { RagfairSellHelper } from "@spt-aki/helpers/RagfairSellHelper";
-import { RagfairOfferHelper } from "@spt-aki/helpers/RagfairOfferHelper";
-import { TProfileChanges, ProfileChange, Warning } from "@spt-aki/models/eft/itemEvent/IItemEventRouterBase";
 import { BrokerPriceManager } from "./broker_price_manager";
 import { VerboseLogger } from "./verbose_logger";
-import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
-import { LogBackgroundColor } from "@spt-aki/models/spt/logging/LogBackgroundColor";
-import { IProcessBuyTradeRequestData } from "@spt-aki/models/eft/trade/IProcessBuyTradeRequestData";
-import { Money } from "@spt-aki/models/enums/Money";
-import { Traders } from "@spt-aki/models/enums/Traders";
-import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
-import { ITraderConfig } from "@spt-aki/models/spt/config/ITraderConfig";
-import { IRagfairConfig } from "@spt-aki/models/spt/config/IRagfairConfig";
-import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
-import { JsonUtil } from "@spt-aki/utils/JsonUtil";
+import { IProcessBuyTradeRequestData } from "@spt/models/eft/trade/IProcessBuyTradeRequestData";
+import { Money } from "@spt/models/enums/Money";
+import { Traders } from "@spt/models/enums/Traders";
+import { TraderHelper } from "@spt/helpers/TraderHelper";
+import { RagfairPriceService } from "@spt/services/RagfairPriceService";
+import { MailSendService } from "@spt/services/MailSendService";
+import { RandomUtil } from "@spt/utils/RandomUtil";
+import { TimeUtil } from "@spt/utils/TimeUtil";
+import { HashUtil } from "@spt/utils/HashUtil";
+import { DatabaseService } from "@spt/services/DatabaseService";
+import { ISptProfile } from "@spt/models/eft/profile/ISptProfile";
+
 
 @injectable()
 export class BrokerTradeController extends TradeController
+
+
 {
     constructor(
-    @inject("WinstonLogger") logger: ILogger,
-        @inject("EventOutputHolder") eventOutputHolder: EventOutputHolder,
-        @inject("TradeHelper") tradeHelper: TradeHelper,
-        @inject("ItemHelper") itemHelper: ItemHelper,
-        @inject("ProfileHelper") profileHelper: ProfileHelper,
-        @inject("TraderHelper") traderHelper: TraderHelper,
-        @inject("JsonUtil") jsonUtil: JsonUtil,
-        @inject("RagfairServer") ragfairServer: RagfairServer,
-        @inject("HttpResponseUtil") httpResponse: HttpResponseUtil,
-        @inject("LocalisationService") localisationService: LocalisationService,
-        @inject("RagfairPriceService") ragfairPriceService: RagfairPriceService,
-        @inject("ConfigServer") configServer: ConfigServer
-        // @inject("IRagfairConfig") ragfairConfig: IRagfairConfig, - not used
-        // @inject("ITraderConfig") traderConfig: ITraderConfig - not used
+        @inject("WinstonLogger") protected logger: ILogger,
+        @inject("DatabaseService") protected databaseService: DatabaseService,
+        @inject("EventOutputHolder") protected eventOutputHolder: EventOutputHolder,
+        @inject("TradeHelper") protected tradeHelper: TradeHelper,
+        @inject("TimeUtil")  protected timeUtil: TimeUtil,
+        @inject("RandomUtil") protected randomUtil: RandomUtil,
+        @inject("HashUtil") protected hashUtil: HashUtil,
+        @inject("ItemHelper") protected itemHelper: ItemHelper,
+        @inject("ProfileHelper") protected profileHelper: ProfileHelper,
+        @inject("RagfairOfferHelper") protected ragfairOfferHelper: RagfairOfferHelper,
+        @inject("TraderHelper") protected traderHelper: TraderHelper,
+        @inject("RagfairServer") protected ragfairServer: RagfairServer,
+        @inject("HttpResponseUtil" ) protected httpResponse: HttpResponseUtil,
+        @inject("LocalisationService") protected localisationService: LocalisationService,
+        @inject("RagfairPriceService") protected ragfairPriceService: RagfairPriceService,
+        @inject("MailSendService") protected mailSendService: MailSendService,
+        @inject("ConfigServer") protected configServer: ConfigServer,
     )
     {
-        super(logger, eventOutputHolder, tradeHelper, itemHelper, profileHelper, traderHelper, jsonUtil, ragfairServer, httpResponse, localisationService, ragfairPriceService, configServer);
+        super(logger, databaseService, eventOutputHolder, tradeHelper, timeUtil, randomUtil, hashUtil, itemHelper, profileHelper, ragfairOfferHelper, traderHelper, ragfairServer, httpResponse, localisationService, ragfairPriceService, mailSendService, configServer);
     }
 
-    // public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string, foundInRaid?: boolean, upd?: Upd): IItemEventRouterResponse - old from SPT 3.5.5
-    public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string): IItemEventRouterResponse 
+    public override confirmTrading(pmcData: IPmcData, body: IProcessBaseTradeRequestData, sessionID: string, profile: ISptProfile): IItemEventRouterResponse 
     {
         // Exceptions seem to be handled somewhere where this method is used.
         // And due to the way they are handled - only "error" is displayed instead of the actual error msg.
@@ -170,8 +172,7 @@ export class BrokerTradeController extends TradeController
                         {
                             // Use total price, since the tax doesn't count towards flea rep.
                             // By default - you get 0.01 rep per 50 000 RUB sold. 
-                            const repGain = this.ragfairConfig.sell.reputation.gain;
-                            const ratingIncrease = tReqData.totalPrice * repGain;
+                            const ratingIncrease = tReqData.totalPrice * (1/5000000 /* 0.01 rep per 50,000 */);
                             pmcData.RagfairInfo.isRatingGrowing = true;
                             pmcData.RagfairInfo.rating += ratingIncrease;
                             verboseLogger.explicitSuccess(
@@ -182,28 +183,11 @@ export class BrokerTradeController extends TradeController
                             // I think it's probably unnecessary to show it in the logs since salesSum also includes your purchases from flea (tested).
                             pmcData.TradersInfo["ragfair"].salesSum += tReqData.totalPrice; // add to the sales sum for consistency
 
-                            // - Changing "profileChanges" doesn't seem to work.
-                            //
-                            // const profileChange = tradeResponse?.profileChanges[sessionID] as ProfileChange;
-                            // if (profileChange == undefined) throw ("Either trade response is undefined, or profile changes user id doesnt match with current user. This probably shouldn't happen.");
-                            // const currFleaRelations = pmcData.TradersInfo["ragfair"];
-                            // if (currFleaRelations == undefined) throw ("Couldn't get current Flea Market relations from user profile. Maybe you haven't traded on flea yet? Notify the developer about this.")
-                            // profileChange.traderRelations["ragfair"] = {
-                            //     disabled: currFleaRelations.disabled,
-                            //     loyaltyLevel: currFleaRelations.loyaltyLevel,
-                            //     salesSum: currFleaRelations.salesSum + tReqData.totalPrice,
-                            //     standing: currFleaRelations.standing,
-                            //     nextResupply: currFleaRelations.nextResupply,
-                            //     unlocked: currFleaRelations.unlocked
-                            // }
                         }
                         verboseLogger.log(`${logPrefix} ${tReqData.traderName} RESPONSE DUMP: ${JSON.stringify(tradeResponse)}`, LogTextColor.CYAN);
                         responses.push(tradeResponse);
                     }
     
-                    // verboseLogger.log(`${logPrefix} ALL RESPONSES ARRAY DUMP: ${JSON.stringify(responses)}`, LogTextColor.CYAN);
-                    // const mergedResponse = this.mergeResponses(sessionID, responses);
-
                     // Apparently every single of these responses point to the same object
                     // which is updated with every transaction, so no manual merging is needed.
                     // Just take the last respons. For now I'll leave the array here, but will probably remove later.

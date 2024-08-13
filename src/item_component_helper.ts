@@ -1,9 +1,9 @@
-import { ItemHelper } from "@spt-aki/helpers/ItemHelper";
-import { IGlobals } from "@spt-aki/models/eft/common/IGlobals";
-import { Item } from "@spt-aki/models/eft/common/tables/IItem";
-import { ITemplateItem } from "@spt-aki/models/eft/common/tables/ITemplateItem";
-import { ITrader } from "@spt-aki/models/eft/common/tables/ITrader";
-import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
+import { ItemHelper } from "@spt/helpers/ItemHelper";
+import { IGlobals } from "@spt/models/eft/common/IGlobals";
+import { Item } from "@spt/models/eft/common/tables/IItem";
+import { ITemplateItem } from "@spt/models/eft/common/tables/ITemplateItem";
+import { ITrader } from "@spt/models/eft/common/tables/ITrader";
+import { DatabaseServer } from "@spt/servers/DatabaseServer";
 import { DependencyContainer } from "tsyringe";
 import { ItemComponentTypes, ItemPointsData, RagfairItemComponentTypes, ClassesWithPoints } from "./item_component_helper_types";
 
@@ -140,7 +140,7 @@ export class ItemComponentHelper
     }
     
     /**
-     * Get item component points for ragfair. In current implementation to mirror the observed SPT-AKI flea behaviour,
+     * Get item component points for ragfair. In current implementation to mirror the observed spt flea behaviour,
      * items use only one component and their price is scaled only based on current durability.
      * @param item Item
      * @returns ItemPointsData

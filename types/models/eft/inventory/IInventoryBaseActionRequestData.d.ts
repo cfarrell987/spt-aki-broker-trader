@@ -1,4 +1,4 @@
-import { IBaseInteractionRequestData } from "../common/request/IBaseInteractionRequestData";
+import { IBaseInteractionRequestData } from "@spt/models/eft/common/request/IBaseInteractionRequestData";
 export interface IInventoryBaseActionRequestData extends IBaseInteractionRequestData {
 }
 export interface To {

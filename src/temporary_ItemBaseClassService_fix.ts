@@ -1,7 +1,8 @@
-import { ILogger } from "@spt-aki/models/spt/utils/ILogger";
-import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
-import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
-import { LocalisationService } from "@spt-aki/services/LocalisationService";
+import { ILogger } from "@spt/models/spt/utils/ILogger";
+import { DatabaseService } from "@spt/services/DatabaseService";
+import { ItemBaseClassService } from "@spt/services/ItemBaseClassService";
+import { LocalisationService } from "@spt/services/LocalisationService";
+import { HttpResponseUtil } from "@spt/utils/HttpResponseUtil";
 import { inject, injectable } from "tsyringe";
 
 /**
@@ -12,11 +13,11 @@ export class FixedItemBaseClassService extends ItemBaseClassService
 {
     constructor(
         @inject("WinstonLogger") protected logger: ILogger,
-        @inject("LocalisationService") protected localisationService: LocalisationService,
-        @inject("DatabaseServer") protected databaseServer: DatabaseServer
+        @inject("LocalizationService") protected localisationService: LocalisationService,
+        @inject("DatabaseService") protected databaseService: DatabaseService
     )
     {
-        super(logger, localisationService, databaseServer);
+        super(logger, localisationService, databaseService);
     }
 
     /**
@@ -35,7 +36,7 @@ export class FixedItemBaseClassService extends ItemBaseClassService
         // No item in cache
         if (!this.itemBaseClassesCache[itemTpl])
         {
-            const allDbItems = this.databaseServer.getTables().templates.items;
+            const allDbItems = this.databaseService.getTables().templates.items;
             if (!allDbItems)
             {
                 this.logger.warning(this.localisationService.getText("baseclass-missing_db_no_cache"));

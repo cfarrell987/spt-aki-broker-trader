@@ -1,4 +1,4 @@
-import { IPreset } from "../../eft/common/IGlobals";
+import { IPreset } from "@spt/models/eft/common/IGlobals";
 export interface CustomPreset {
     key: string;
     preset: IPreset;

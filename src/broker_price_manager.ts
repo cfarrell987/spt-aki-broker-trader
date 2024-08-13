@@ -1,34 +1,34 @@
-import { HandbookHelper } from "@spt-aki/helpers/HandbookHelper";
-import { ItemHelper } from "@spt-aki/helpers/ItemHelper";
-import { RagfairServerHelper } from "@spt-aki/helpers/RagfairServerHelper";
-import { IPmcData } from "@spt-aki/models/eft/common/IPmcData";
-import { IHandbookBase } from "@spt-aki/models/eft/common/tables/IHandbookBase";
-import { ITemplateItem } from "@spt-aki/models/eft/common/tables/ITemplateItem";
-import { ITrader } from "@spt-aki/models/eft/common/tables/ITrader";
-import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
-import { Traders } from "@spt-aki/models/enums/Traders"
-import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
+import { HandbookHelper } from "@spt/helpers/HandbookHelper";
+import { ItemHelper } from "@spt/helpers/ItemHelper";
+import { RagfairServerHelper } from "@spt/helpers/RagfairServerHelper";
+import { IPmcData } from "@spt/models/eft/common/IPmcData";
+import { IHandbookBase } from "@spt/models/eft/common/tables/IHandbookBase";
+import { ITemplateItem } from "@spt/models/eft/common/tables/ITemplateItem";
+import { ITrader } from "@spt/models/eft/common/tables/ITrader";
+import { IProcessSellTradeRequestData } from "@spt/models/eft/trade/IProcessSellTradeRequestData";
+import { Traders } from "@spt/models/enums/Traders"
+import { DatabaseServer } from "@spt/servers/DatabaseServer";
 import { DependencyContainer, container as tsyringeContainer } from "tsyringe";
-import { Item } from "@spt-aki/models/eft/common/tables/IItem";
-import { RagfairPriceService } from "@spt-aki/services/RagfairPriceService";
-import { RagfairOfferService } from "@spt-aki/services/RagfairOfferService";
+import { Item } from "@spt/models/eft/common/tables/IItem";
+import { RagfairPriceService } from "@spt/services/RagfairPriceService";
+import { RagfairOfferService } from "@spt/services/RagfairOfferService";
 
 import baseJson from "../db/base.json";
 import modInfo from "../package.json";
 import modConfig from "../config/config.json";
-import { IGlobals, IPriceModifier } from "@spt-aki/models/eft/common/IGlobals";
+import { IGlobals, IPriceModifier } from "@spt/models/eft/common/IGlobals";
 
 import * as fs from "fs";
 import * as path from "path";
-import { PaymentHelper } from "@spt-aki/helpers/PaymentHelper";
-import { MemberCategory } from "@spt-aki/models/enums/MemberCategory";
-import { Money } from "@spt-aki/models/enums/Money";
-import { PresetHelper } from "@spt-aki/helpers/PresetHelper";
+import { PaymentHelper } from "@spt/helpers/PaymentHelper";
+import { MemberCategory } from "@spt/models/enums/MemberCategory";
+import { Money } from "@spt/models/enums/Money";
+import { PresetHelper } from "@spt/helpers/PresetHelper";
 import { ItemComponentHelper } from "./item_component_helper";
-import { TraderHelper } from "@spt-aki/helpers/TraderHelper";
+import { TraderHelper } from "@spt/helpers/TraderHelper";
 import { TradersMetaData, BrokerSellData, BrokerPriceManagerCache, TraderMetaData, SellDecision, ProcessedSellData } from "./broker_price_manager_types";
 import { ItemComponentTypes, ItemPointsData } from "./item_component_helper_types";
-import { ItemBaseClassService } from "@spt-aki/services/ItemBaseClassService";
+import { ItemBaseClassService } from "@spt/services/ItemBaseClassService";
 export class BrokerPriceManager 
 {
     private static _instance: BrokerPriceManager;
@@ -120,7 +120,7 @@ export class BrokerPriceManager
                 // Exclude LK and "ragfair"
                 this.supportedTraders = Object.keys(this.dbTraders).filter(
                     (id: string) => 
-                        ![Traders.LIGHTHOUSEKEEPER, "ragfair", BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(id)
+                        ![Traders.LIGHTHOUSEKEEPER, "ragfair", Traders.BTR, Traders.REF,  BrokerPriceManager.brokerTraderId, BrokerPriceManager.brokerTraderCurrencyExhangeId].includes(id)
                 );
                 console.log("No custom trader id's specified. Using all available traders.")
             }
@@ -235,11 +235,11 @@ export class BrokerPriceManager
 
     public static getInstance(container?: DependencyContainer): BrokerPriceManager
     {
-        if (!this._instance)
+        if (!BrokerPriceManager._instance)
         {
             BrokerPriceManager._instance = new BrokerPriceManager(container);
         }
-        return this._instance;
+        return BrokerPriceManager._instance;
     }
 
     /**
@@ -269,7 +269,7 @@ export class BrokerPriceManager
 
     public static get instance(): BrokerPriceManager
     {
-        return this.getInstance();
+        return BrokerPriceManager.getInstance();
     }
 
     public get currencyBasePrices(): Record<string, number>
@@ -429,7 +429,7 @@ export class BrokerPriceManager
         const bestTrader = this.getBestTraderForItem(pmcData, item);
         const traderPrice = this.getItemTraderPrice(pmcData, item, bestTrader.id);
         // ragfairIgnoreAttachments - Check if we ignore each child ragfair price when calculating ragfairPrice.
-        // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in SPT-AKI
+        // When accounting child items - total flea price of found in raid weapons can be very unbalanced due to how in spt
         // some random, even default weapon attachments have unreasonable price on flea.
         const ragfairPrice = modConfig.ragfairIgnoreAttachments ? this.getSingleItemRagfairPrice(item) : this.getItemRagfairPrice(item, pmcData);  
         // console.log(`[traderPrice] ${traderPrice}`);      
@@ -513,7 +513,7 @@ export class BrokerPriceManager
         num6 *= intelTaxModifier;
 
         const itemTpl = this.dbItems[item._tpl];
-        if (item == undefined) throw (`BrokerPriceManager | Couldn't find item with template ${item._tpl} when calculating flea tax!`);
+        if (item === undefined) throw (`BrokerPriceManager | Couldn't find item with template ${item._tpl} when calculating flea tax!`);
         num6 *= itemTpl._props.RagFairCommissionModifier;
 
         if (this.componentHelper.hasComponent(item, ItemComponentTypes.BUFF))
@@ -587,7 +587,7 @@ export class BrokerPriceManager
             const itemStackObjectsCount = this.getItemStackObjectsCount(inventoryItem);
             // No need to stress the server and count every child when we ignore item children, due to how getFullItemCont works.
             const fullItemCount = modConfig.ragfairIgnoreAttachments ? itemStackObjectsCount : this.getFullItemCount(inventoryItem, pmcData);
-            if (accum[groupByTraderId] == undefined)
+            if (accum[groupByTraderId] === undefined)
             {
                 // Create new group
                 accum[groupByTraderId] = {
@@ -647,7 +647,7 @@ export class BrokerPriceManager
         if (!this.canBeSoldToTrader(pmcData, item, traderId)) return 0;
 
         const traderMeta = this.tradersMetaData[traderId];
-        if (traderMeta == undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
+        if (traderMeta === undefined) throw (`BrokerPriceManager | getTraderItemPrice, couldn't find trader meta by id ${traderId}`);
 
         let price = this.getBuyoutPriceForAllItems(pmcData, item, 0, traderId === Traders.FENCE);
         price = price * (1 - traderMeta.buyPriceCoef/100); // apply trader price modifier
@@ -725,7 +725,7 @@ export class BrokerPriceManager
         {
             // "Points" are Durability
             component = this.componentHelper.getItemComponentPoints(item, ItemComponentTypes.REPAIRABLE);
-            const num2 = 0.01 * Math.pow(0, component.maxPoints);
+            const num2 = 0.01 * 0 ** component.maxPoints;
             const num3 = Math.ceil(component.maxPoints);
             const num4 = props.RepairCost * (num3 - Math.ceil(component.points));
             price = price * (num3 / component.templateMaxPoints + num2) - num4;
@@ -967,7 +967,7 @@ export class BrokerPriceManager
     public convertRoublesToTraderCurrency(roubleAmount: number, traderId: string): number
     {
         const trader = this.dbTraders[traderId];
-        if (trader == undefined) console.log(`[${modInfo.name} ${modInfo.version}] Error converting to trader currency. Couldn't find trader! Defaulting to RUB.`);
+        if (trader === undefined) console.log(`[${modInfo.name} ${modInfo.version}] Error converting to trader currency. Couldn't find trader! Defaulting to RUB.`);
 
         const tCurrencyTag = trader?.base?.currency ?? "RUB";
         const currencyTpl = this.paymentHelper.getCurrency(tCurrencyTag);

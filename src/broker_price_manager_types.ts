@@ -1,5 +1,5 @@
-import { IItemBuyData } from "@spt-aki/models/eft/common/tables/ITrader";
-import { IProcessSellTradeRequestData } from "@spt-aki/models/eft/trade/IProcessSellTradeRequestData";
+import { IItemBuyData } from "@spt/models/eft/common/tables/ITrader";
+import { IProcessSellTradeRequestData } from "@spt/models/eft/trade/IProcessSellTradeRequestData";
 
 export interface BrokerPriceManagerCache
 {

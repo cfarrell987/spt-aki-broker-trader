@@ -1,10 +1,7 @@
-﻿using HarmonyLib;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace BrokerTraderPlugin.Reflections
 {
@@ -21,7 +18,7 @@ namespace BrokerTraderPlugin.Reflections
             DeclaredType = typeof(TraderClass).GetNestedTypes().FirstOrDefault(type =>
             {
                 if (!type.IsNestedPublic) return false;
-                var constructor = type.GetConstructor(new Type[] { typeof(string), typeof(int) });
+                var constructor = type.GetConstructor([typeof(string), typeof(int)]);
                 var fieldNames = type.GetFields().Select(field => field.Name).ToList();
                 return constructor != null && fieldNames.Contains(FieldNameCurrencyId) && fieldNames.Contains(FieldNameAmount);
             });
@@ -32,10 +29,23 @@ namespace BrokerTraderPlugin.Reflections
         }
 
         // Invoke a constructor to create an object of original declared type.
-        public static object New(string currencyId, int amount)
+        public static object New(string currencyId, double amount)
         {
-            return DeclaredConstructor.Invoke(new object[] { currencyId, amount });
-        }
+            int iAmount;
+            if (amount > Int32.MaxValue)
+            {
+                iAmount = Int32.MaxValue;
+            }
+            else if(amount < Int32.MinValue)
+            {
+                iAmount = Int32.MinValue;
+            }
+            else
+            {
+                iAmount = Convert.ToInt32(amount);
+            }
+            return DeclaredConstructor.Invoke([currencyId, iAmount]);        
+            }
 
         public static string GetCurrencyId(object instance)
         {
