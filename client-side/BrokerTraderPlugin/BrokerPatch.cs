@@ -1,29 +1,24 @@
-﻿using Aki.Reflection.Patching;
+﻿using SPT.Reflection.Patching;
 using BrokerTraderPlugin;
 using EFT.InventoryLogic;
 using EFT.UI;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Aki.Common.Http;
+using SPT.Common.Http;
 
-//using ItemPrice = TraderClass.GStruct219; // now use BrokerTraderPlugin.Reflections.ItemPrice instead of generic struct reference
-//using CurrencyHelper = GClass2182; // old was GClass2179 // now use BrokerTraderPlugin.Reflections.CurrencyHelper instead of generic class reference
-
-using Aki.Common.Utils;
+using SPT.Common.Utils;
 
 using static BrokerTraderPlugin.PriceManager;
 using TMPro;
 using System.Text.RegularExpressions;
-using Comfort.Common;
 using HarmonyLib;
 using System;
 using BrokerTraderPlugin.Reflections;
 using UnityEngine;
-using static UnityEngine.RemoteConfigSettingsHelper;
-using UnityEngine.UIElements;
+using EFT.Communications;
 using InventoryOrganizingFeatures.Reflections.Extensions;
-using BrokerTraderPlugin.Reflections.Extensions;
+
 
 namespace BrokerPatch
 {
@@ -54,34 +49,13 @@ namespace BrokerPatch
             }
             catch (Exception ex)
             {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                var msg = $"{MyPluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}\n {ex}";
                 Logger.LogError(msg);
-                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                NotificationManagerClass.DisplayWarningNotification(msg, ENotificationDurationType.Default);
                 throw ex;
             }
         }
 
-        //[PatchPostfix]
-        //private static void PatchPostfix(ref TraderClass __instance, Item item, ref object __result)
-        //{
-        //    // Only affect the Broker
-        //    if (__instance.Id == BROKER_TRADER_ID)
-        //    {
-        //        if (__result != null)
-        //        {
-        //            try
-        //            {
-        //                __result = GetBestItemPrice(item);
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during GetUserItemPrice patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
-        //                Logger.LogError(msg);
-        //                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
-        //            }
-        //        }
-        //    }
-        //}
     }
     //  Change how total transaction sum is generated when selling to trader.
     public class PatchEquivalentSum : ModulePatch
@@ -161,9 +135,9 @@ namespace BrokerPatch
             }
             catch (Exception ex)
             {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during EquivalentSum patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                var msg = $"{MyPluginInfo.PLUGIN_GUID} error! Threw an exception during EquivalentSum patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
-                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                NotificationManagerClass.DisplayWarningNotification(msg,ENotificationDurationType.Default);
                 throw ex;
             }
         }
@@ -188,9 +162,9 @@ namespace BrokerPatch
             }
             catch (Exception ex)
             {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during RefreshRagfairOnTraderScreenShow patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                var msg = $"{MyPluginInfo.PLUGIN_GUID} error! Threw an exception during RefreshRagfairOnTraderScreenShow patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
-                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                NotificationManagerClass.DisplayWarningNotification(msg,ENotificationDurationType.Default);
                 throw ex;
             }
         }
@@ -256,7 +230,7 @@ namespace BrokerPatch
                                 int totalPrice = group.Where(item => !CurrencyHelper.IsCurrencyId(soldItems.First(soldItem => soldItem.Id == item.ItemId).TemplateId)).Sum(item => item.Price);
                                 if (totalPrice < 1) break; // if no "non-currency" items just break out of the loop
                                 string currencyChar = CurrencyHelper.GetCurrencyChar(ECurrencyType.RUB);
-                                string repIncStr = (totalPrice * RagfairSellRepGain).ToString();
+                                string repIncStr = (totalPrice * (1/5000000)).ToString();
                                 // add a space 2 digits after the floating point for better contextual readability
                                 message += $"    \u2022    {ragfairLocale}:    +{repIncStr.Insert(repIncStr.IndexOf('.') + 2 + 1, " ")}\n\n";
                             }
@@ -265,7 +239,7 @@ namespace BrokerPatch
                                 NotificationManagerClass.DisplayMessageNotification(
                                     message,
                                     ModNotificationDuration,
-                                    EFT.Communications.ENotificationIconType.RagFair,
+                                    ENotificationIconType.RagFair,
                                     Color.white
                                 );
                             }
@@ -275,9 +249,9 @@ namespace BrokerPatch
             }
             catch (Exception ex)
             {
-                var msg = $"{PluginInfo.PLUGIN_GUID} error! Threw an exception during SendDataOnDealButtonPress patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
+                var msg = $"{MyPluginInfo.PLUGIN_GUID} error! Threw an exception during SendDataOnDealButtonPress patch, perhaps due to version incompatibility. Exception message: {ex.Message}";
                 Logger.LogError(msg);
-                NotificationManagerClass.DisplayWarningNotification(msg, EFT.Communications.ENotificationDurationType.Infinite);
+                NotificationManagerClass.DisplayWarningNotification(msg,ENotificationDurationType.Default);
                 throw ex;
             }
         }

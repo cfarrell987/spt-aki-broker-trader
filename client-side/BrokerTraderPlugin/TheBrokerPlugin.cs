@@ -1,4 +1,4 @@
-﻿using Aki.Common.Http;
+﻿using SPT.Common.Http;
 using BepInEx;
 using BepInEx.Logging;
 using BrokerPatch;
@@ -9,14 +9,14 @@ using System.Runtime.CompilerServices;
 
 namespace BrokerTraderPlugin
 {
-    [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
-    public class Plugin : BaseUnityPlugin
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+    public class TheBrokerPlugin : BaseUnityPlugin
     {
         public static ManualLogSource GlobalLogger;
         private void Awake()
         {
             // Plugin startup logic
-            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+            Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
             GlobalLogger = Logger;
             ReflectionHelper.Logger = Logger;
             try
@@ -42,7 +42,7 @@ namespace BrokerTraderPlugin
             }
             catch (Exception ex)
             {
-                Logger.LogError($"Error! {PluginInfo.PLUGIN_GUID} threw an exception while loading, perhaps due to version incompatibility. Exception message: {ex.Message}");
+                Logger.LogError($"Error! {MyPluginInfo.PLUGIN_GUID} threw an exception while loading, perhaps due to version incompatibility. Exception message: {ex.Message}");
                 throw ex;
             }
         }

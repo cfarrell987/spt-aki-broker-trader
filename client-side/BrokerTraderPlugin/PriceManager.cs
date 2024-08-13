@@ -8,14 +8,15 @@ using System.Linq;
 //using RepairKitComponent = GClass2387; //GClass2384; // not used since GetSingleItemBuyoutPrice is used for ragfair price calculation.
 using EFT;
 using UnityEngine;
-using Aki.Common.Http;
-using Aki.Common.Utils;
+using SPT.Common.Http;
+using SPT.Common.Utils;
 using Newtonsoft.Json;
 using BrokerTraderPlugin.Reflections;
 using EFT.Communications;
 using BrokerTraderPlugin.Reflections.Extensions;
 using Comfort.Common;
-using Aki.Reflection.Utils;
+using SPT.Reflection.Utils;
+using BepInEx.Logging;
 
 namespace BrokerTraderPlugin
 {
@@ -165,7 +166,7 @@ namespace BrokerTraderPlugin
             }
         }
         public static Dictionary<string, SupplyData> SupplyData = new Dictionary<string, SupplyData>();
-        public static Dictionary<string, double> CurrencyBasePrices { get; set; } = new Dictionary<string, double>();
+        public static Dictionary<string, double> CurrencyBasePrices { get; set; } = [];
         // Requests in a static constructor will be performed only once for initialization.
         static PriceManager()
         {
@@ -253,7 +254,7 @@ namespace BrokerTraderPlugin
             {
                 // Debug.LogError("supplyData is null"); doesn't seem to work
                 // use long duration, infinite is unneeded.
-                NotificationManagerClass.DisplayWarningNotification("BrokerTrader error! GetTraderItemPriceData - supplyData is null", EFT.Communications.ENotificationDurationType.Long);
+                NotificationManagerClass.DisplayWarningNotification("BrokerTrader error! GetTraderItemPriceData - supplyData is null", ENotificationDurationType.Default);
                 return new TraderItemPriceData(trader.Id, null, -1, -1);
             }
             if (!trader.RInfo().CanBuyItem(item)) return new TraderItemPriceData(trader.Id, null, -1, -1);

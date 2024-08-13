@@ -17,12 +17,12 @@ namespace BrokerTraderPlugin.Reflections
 
         public bool CanBuyItem(Item item)
         {
-            return InvokeMethod<bool>("CanBuyItem", new object[] { item }, new Type[] { typeof(Item) });
+            return InvokeMethod<bool>("CanBuyItem", [item], [typeof(Item)]);
         }
 
         public double ApplyPriceModifier(double basePrice)
         {
-            return InvokeMethod<double>("ApplyPriceModifier", new object[] { basePrice }, new Type[] { typeof(double) });
+            return InvokeMethod<double>("ApplyPriceModifier", [basePrice], [typeof(double)]);
         }
 
         public bool Unlocked
