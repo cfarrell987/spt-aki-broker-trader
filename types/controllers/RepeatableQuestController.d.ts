@@ -1,41 +1,47 @@
-import { RepeatableQuestGenerator } from "../generators/RepeatableQuestGenerator";
-import { ProfileHelper } from "../helpers/ProfileHelper";
-import { RagfairServerHelper } from "../helpers/RagfairServerHelper";
-import { RepeatableQuestHelper } from "../helpers/RepeatableQuestHelper";
-import { IEmptyRequestData } from "../models/eft/common/IEmptyRequestData";
-import { IPmcData } from "../models/eft/common/IPmcData";
-import { IPmcDataRepeatableQuest } from "../models/eft/common/tables/IRepeatableQuests";
-import { IItemEventRouterResponse } from "../models/eft/itemEvent/IItemEventRouterResponse";
-import { IRepeatableQuestChangeRequest } from "../models/eft/quests/IRepeatableQuestChangeRequest";
-import { IQuestConfig, IRepeatableQuestConfig } from "../models/spt/config/IQuestConfig";
-import { IQuestTypePool } from "../models/spt/repeatable/IQuestTypePool";
-import { ILogger } from "../models/spt/utils/ILogger";
-import { EventOutputHolder } from "../routers/EventOutputHolder";
-import { ConfigServer } from "../servers/ConfigServer";
-import { PaymentService } from "../services/PaymentService";
-import { ProfileFixerService } from "../services/ProfileFixerService";
-import { HttpResponseUtil } from "../utils/HttpResponseUtil";
-import { JsonUtil } from "../utils/JsonUtil";
-import { ObjectId } from "../utils/ObjectId";
-import { RandomUtil } from "../utils/RandomUtil";
-import { TimeUtil } from "../utils/TimeUtil";
+import { RepeatableQuestGenerator } from "@spt/generators/RepeatableQuestGenerator";
+import { ProfileHelper } from "@spt/helpers/ProfileHelper";
+import { QuestHelper } from "@spt/helpers/QuestHelper";
+import { RepeatableQuestHelper } from "@spt/helpers/RepeatableQuestHelper";
+import { IPmcData } from "@spt/models/eft/common/IPmcData";
+import { IPmcDataRepeatableQuest, IRepeatableQuest } from "@spt/models/eft/common/tables/IRepeatableQuests";
+import { IItemEventRouterResponse } from "@spt/models/eft/itemEvent/IItemEventRouterResponse";
+import { ISptProfile } from "@spt/models/eft/profile/ISptProfile";
+import { IRepeatableQuestChangeRequest } from "@spt/models/eft/quests/IRepeatableQuestChangeRequest";
+import { ELocationName } from "@spt/models/enums/ELocationName";
+import { IQuestConfig, IRepeatableQuestConfig } from "@spt/models/spt/config/IQuestConfig";
+import { IGetRepeatableByIdResult } from "@spt/models/spt/quests/IGetRepeatableByIdResult";
+import { IQuestTypePool } from "@spt/models/spt/repeatable/IQuestTypePool";
+import { ILogger } from "@spt/models/spt/utils/ILogger";
+import { EventOutputHolder } from "@spt/routers/EventOutputHolder";
+import { ConfigServer } from "@spt/servers/ConfigServer";
+import { DatabaseService } from "@spt/services/DatabaseService";
+import { LocalisationService } from "@spt/services/LocalisationService";
+import { PaymentService } from "@spt/services/PaymentService";
+import { ProfileFixerService } from "@spt/services/ProfileFixerService";
+import { HttpResponseUtil } from "@spt/utils/HttpResponseUtil";
+import { ObjectId } from "@spt/utils/ObjectId";
+import { RandomUtil } from "@spt/utils/RandomUtil";
+import { TimeUtil } from "@spt/utils/TimeUtil";
+import { ICloner } from "@spt/utils/cloners/ICloner";
 export declare class RepeatableQuestController {
-    protected timeUtil: TimeUtil;
     protected logger: ILogger;
+    protected databaseService: DatabaseService;
+    protected timeUtil: TimeUtil;
     protected randomUtil: RandomUtil;
     protected httpResponse: HttpResponseUtil;
-    protected jsonUtil: JsonUtil;
     protected profileHelper: ProfileHelper;
     protected profileFixerService: ProfileFixerService;
-    protected ragfairServerHelper: RagfairServerHelper;
+    protected localisationService: LocalisationService;
     protected eventOutputHolder: EventOutputHolder;
     protected paymentService: PaymentService;
     protected objectId: ObjectId;
     protected repeatableQuestGenerator: RepeatableQuestGenerator;
     protected repeatableQuestHelper: RepeatableQuestHelper;
+    protected questHelper: QuestHelper;
     protected configServer: ConfigServer;
+    protected cloner: ICloner;
     protected questConfig: IQuestConfig;
-    constructor(timeUtil: TimeUtil, logger: ILogger, randomUtil: RandomUtil, httpResponse: HttpResponseUtil, jsonUtil: JsonUtil, profileHelper: ProfileHelper, profileFixerService: ProfileFixerService, ragfairServerHelper: RagfairServerHelper, eventOutputHolder: EventOutputHolder, paymentService: PaymentService, objectId: ObjectId, repeatableQuestGenerator: RepeatableQuestGenerator, repeatableQuestHelper: RepeatableQuestHelper, configServer: ConfigServer);
+    constructor(logger: ILogger, databaseService: DatabaseService, timeUtil: TimeUtil, randomUtil: RandomUtil, httpResponse: HttpResponseUtil, profileHelper: ProfileHelper, profileFixerService: ProfileFixerService, localisationService: LocalisationService, eventOutputHolder: EventOutputHolder, paymentService: PaymentService, objectId: ObjectId, repeatableQuestGenerator: RepeatableQuestGenerator, repeatableQuestHelper: RepeatableQuestHelper, questHelper: QuestHelper, configServer: ConfigServer, cloner: ICloner);
     /**
      * Handle client/repeatalbeQuests/activityPeriods
      * Returns an array of objects in the format of repeatable quests to the client.
@@ -57,11 +63,44 @@ export declare class RepeatableQuestController {
      * (if the are on "Succeed" but not "Completed" we keep them, to allow the player to complete them and get the rewards)
      * The new quests generated are again persisted in profile.RepeatableQuests
      *
+     * @param   {string}    sessionID   Player's session id
      *
-     * @param   {string}    sessionId       Player's session id
-     * @returns  {array}                    array of "repeatableQuestObjects" as descibed above
+     * @returns  {array}                Array of "repeatableQuestObjects" as described above
      */
-    getClientRepeatableQuests(_info: IEmptyRequestData, sessionID: string): IPmcDataRepeatableQuest[];
+    getClientRepeatableQuests(sessionID: string): IPmcDataRepeatableQuest[];
+    /**
+     * Expire quests and replace expired quests with ready-to-hand-in quests inside generatedRepeatables.activeQuests
+     * @param generatedRepeatables Repeatables to process (daily/weekly)
+     * @param pmcData Player profile
+     */
+    protected processExpiredQuests(generatedRepeatables: IPmcDataRepeatableQuest, pmcData: IPmcData): void;
+    /**
+     * Check if a repeatable quest type (daily/weekly) is active for the given profile
+     * @param repeatableConfig Repeatable quest config
+     * @param pmcData Player profile
+     * @returns True if profile is allowed to access dailies
+     */
+    protected canProfileAccessRepeatableQuests(repeatableConfig: IRepeatableQuestConfig, pmcData: IPmcData): boolean;
+    /**
+     * Does player have daily scav quests unlocked
+     * @param pmcData Player profile to check
+     * @returns True if unlocked
+     */
+    protected playerHasDailyScavQuestsUnlocked(pmcData: IPmcData): boolean;
+    /**
+     * Does player have daily pmc quests unlocked
+     * @param pmcData Player profile to check
+     * @param repeatableConfig Config of daily type to check
+     * @returns True if unlocked
+     */
+    protected playerHasDailyPmcQuestsUnlocked(pmcData: IPmcData, repeatableConfig: IRepeatableQuestConfig): boolean;
+    /**
+     * Get the number of quests to generate - takes into account charisma state of player
+     * @param repeatableConfig Config
+     * @param pmcData Player profile
+     * @returns Quest count
+     */
+    protected getQuestCount(repeatableConfig: IRepeatableQuestConfig, pmcData: IPmcData): number;
     /**
      * Get repeatable quest data from profile from name (daily/weekly), creates base repeatable quest object if none exists
      * @param repeatableConfig daily/weekly config
@@ -83,9 +122,46 @@ export declare class RepeatableQuestController {
      */
     protected generateQuestPool(repeatableConfig: IRepeatableQuestConfig, pmcLevel: number): IQuestTypePool;
     protected createBaseQuestPool(repeatableConfig: IRepeatableQuestConfig): IQuestTypePool;
+    /**
+     * Return the locations this PMC is allowed to get daily quests for based on their level
+     * @param locations The original list of locations
+     * @param pmcLevel The players level
+     * @returns A filtered list of locations that allow the player PMC level to access it
+     */
+    protected getAllowedLocationsForPmcLevel(locations: Record<ELocationName, string[]>, pmcLevel: number): Partial<Record<ELocationName, string[]>>;
+    /**
+     * Return true if the given pmcLevel is allowed on the given location
+     * @param location The location name to check
+     * @param pmcLevel The level of the pmc
+     * @returns True if the given pmc level is allowed to access the given location
+     */
+    protected isPmcLevelAllowedOnLocation(location: string, pmcLevel: number): boolean;
     debugLogRepeatableQuestIds(pmcData: IPmcData): void;
     /**
      * Handle RepeatableQuestChange event
+     *
+     * Replace a players repeatable quest
+     * @param pmcData Player profile
+     * @param changeRequest Request object
+     * @param sessionID Session id
+     * @returns IItemEventRouterResponse
      */
     changeRepeatableQuest(pmcData: IPmcData, changeRequest: IRepeatableQuestChangeRequest, sessionID: string): IItemEventRouterResponse;
+    /**
+     * Find a repeatable (daily/weekly/scav) from a players profile by its id
+     * @param questId Id of quest to find
+     * @param pmcData Profile that contains quests to look through
+     * @returns IGetRepeatableByIdResult
+     */
+    protected getRepeatableById(questId: string, pmcData: IPmcData): IGetRepeatableByIdResult;
+    protected attemptToGenerateRepeatableQuest(pmcData: IPmcData, questTypePool: IQuestTypePool, repeatableConfig: IRepeatableQuestConfig): IRepeatableQuest;
+    /**
+     * Some accounts have access to free repeatable quest refreshes
+     * Track the usage of them inside players profile
+     * @param fullProfile Player profile
+     * @param repeatableSubType Can be daily / weekly / scav repeatable
+     * @param repeatableTypeName Subtype of repeatable quest: daily / weekly / scav
+     * @returns Is the repeatable being replaced for free
+     */
+    protected useFreeRefreshIfAvailable(fullProfile: ISptProfile, repeatableSubType: IPmcDataRepeatableQuest, repeatableTypeName: string): boolean;
 }

@@ -1,27 +1,31 @@
-import { HideoutController } from "../controllers/HideoutController";
-import { RagfairController } from "../controllers/RagfairController";
-import { IEmptyRequestData } from "../models/eft/common/IEmptyRequestData";
-import { IGlobals } from "../models/eft/common/IGlobals";
-import { ICustomizationItem } from "../models/eft/common/tables/ICustomizationItem";
-import { IHandbookBase } from "../models/eft/common/tables/IHandbookBase";
-import { IGetItemPricesResponse } from "../models/eft/game/IGetItemPricesResponse";
-import { IHideoutArea } from "../models/eft/hideout/IHideoutArea";
-import { IHideoutProduction } from "../models/eft/hideout/IHideoutProduction";
-import { IHideoutScavCase } from "../models/eft/hideout/IHideoutScavCase";
-import { IHideoutSettingsBase } from "../models/eft/hideout/IHideoutSettingsBase";
-import { IGetBodyResponseData } from "../models/eft/httpResponse/IGetBodyResponseData";
-import { ISettingsBase } from "../models/spt/server/ISettingsBase";
-import { DatabaseServer } from "../servers/DatabaseServer";
-import { HttpResponseUtil } from "../utils/HttpResponseUtil";
+import { HideoutController } from "@spt/controllers/HideoutController";
+import { RagfairController } from "@spt/controllers/RagfairController";
+import { TraderHelper } from "@spt/helpers/TraderHelper";
+import { IEmptyRequestData } from "@spt/models/eft/common/IEmptyRequestData";
+import { IGlobals } from "@spt/models/eft/common/IGlobals";
+import { ICustomizationItem } from "@spt/models/eft/common/tables/ICustomizationItem";
+import { IHandbookBase } from "@spt/models/eft/common/tables/IHandbookBase";
+import { IGetItemPricesResponse } from "@spt/models/eft/game/IGetItemPricesResponse";
+import { IHideoutArea } from "@spt/models/eft/hideout/IHideoutArea";
+import { IHideoutProduction } from "@spt/models/eft/hideout/IHideoutProduction";
+import { IHideoutScavCase } from "@spt/models/eft/hideout/IHideoutScavCase";
+import { IHideoutSettingsBase } from "@spt/models/eft/hideout/IHideoutSettingsBase";
+import { IGetBodyResponseData } from "@spt/models/eft/httpResponse/IGetBodyResponseData";
+import { ISettingsBase } from "@spt/models/spt/server/ISettingsBase";
+import { DatabaseService } from "@spt/services/DatabaseService";
+import { HttpResponseUtil } from "@spt/utils/HttpResponseUtil";
+import { TimeUtil } from "@spt/utils/TimeUtil";
 /**
  * Handle client requests
  */
 export declare class DataCallbacks {
     protected httpResponse: HttpResponseUtil;
-    protected databaseServer: DatabaseServer;
+    protected timeUtil: TimeUtil;
+    protected traderHelper: TraderHelper;
+    protected databaseService: DatabaseService;
     protected ragfairController: RagfairController;
     protected hideoutController: HideoutController;
-    constructor(httpResponse: HttpResponseUtil, databaseServer: DatabaseServer, ragfairController: RagfairController, hideoutController: HideoutController);
+    constructor(httpResponse: HttpResponseUtil, timeUtil: TimeUtil, traderHelper: TraderHelper, databaseService: DatabaseService, ragfairController: RagfairController, hideoutController: HideoutController);
     /**
      * Handle client/settings
      * @returns ISettingsBase
