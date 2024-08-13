@@ -1,18 +1,19 @@
-import { IGetBodyResponseData } from "@spt-aki/models/eft/httpResponse/IGetBodyResponseData";
-import { DynamicRouterModService } from "@spt-aki/services/mod/dynamicRouter/DynamicRouterModService"
-import { JsonUtil } from "@spt-aki/utils/JsonUtil";
-import { DependencyContainer } from "tsyringe"
-import { BrokerPriceManager } from "./broker_price_manager"
+import { IGetBodyResponseData } from "@spt/models/eft/httpResponse/IGetBodyResponseData";
+import { DynamicRouterModService } from "@spt/services/mod/dynamicRouter/DynamicRouterModService"
+import { JsonUtil } from "@spt/utils/JsonUtil";
+import { DependencyContainer } from "tsyringe";
+import { BrokerPriceManager } from "./broker_price_manager";
 
 import modInfo from "../package.json";
 import modCfg from "../config/config.json";
 import { VerboseLogger } from "./verbose_logger";
-import { HttpResponseUtil } from "@spt-aki/utils/HttpResponseUtil";
-import { IRagfairConfig } from "@spt-aki/models/spt/config/IRagfairConfig";
-import { ConfigServer } from "@spt-aki/servers/ConfigServer";
-import { ConfigTypes } from "@spt-aki/models/enums/ConfigTypes";
+import { HttpResponseUtil } from "@spt/utils/HttpResponseUtil";
+import { ConfigServer } from "@spt/servers/ConfigServer";
+import { DatabaseServer } from "@spt/servers/DatabaseServer";
+import { IDatabaseTables } from "@spt/models/spt/server/IDatabaseTables";
 
-export class BrokerTraderRouter
+// biome-ignore lint/complexity/noStaticOnlyClass: <explanation>
+export class BrokerTraderRouter implements IPreSPTLoad
 {
     private static container: DependencyContainer;
     private static router: DynamicRouterModService;
@@ -123,8 +124,8 @@ export class BrokerTraderRouter
 
     private static respondGetRagfairSellRepGain(): IGetBodyResponseData<number>
     {
-        const configServer = this.container.resolve<ConfigServer>(ConfigServer.name);
-        const ragfairConfig: IRagfairConfig = configServer.getConfig(ConfigTypes.RAGFAIR);
-        return this.http.getBody<number>(ragfairConfig.sell.reputation.gain);
+        const databaseServer = this.container.resolve<DatabaseServer>("DatabaseServer");
+        // const ragfairConfig: IRagfairConfig = configServer.getConfig(ConfigTypes.RAGFAIR);
+        return this.http.getBody<number>(databaseServer.getTables().globals.config.RagFair.ratingIncreaseCount);
     }
 }
